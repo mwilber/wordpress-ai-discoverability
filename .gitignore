@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.pyc
+vendor/
+node_modules/
+dist/*.zip
