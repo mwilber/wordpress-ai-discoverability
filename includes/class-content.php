@@ -90,12 +90,12 @@ final class Content {
 	public static function llms(): string {
 		$s = Settings::get();
 		if ( '' !== trim( $s['llms_custom'] ) ) {
-			return strtr( $s['llms_custom'], array( '{{site_name}}' => get_bloginfo( 'name' ), '{{site_url}}' => home_url( '/' ), '{{description}}' => get_bloginfo( 'description' ), '{{mcp_url}}' => $s['mcp_enabled'] ? rest_url( 'gz-ai/v1/mcp' ) : '' ) ) . "\n";
+			return strtr( $s['llms_custom'], array( '{{site_name}}' => get_bloginfo( 'name' ), '{{site_url}}' => home_url( '/' ), '{{description}}' => get_bloginfo( 'description' ), '{{mcp_url}}' => $s['mcp_enabled'] ? Endpoints::mcp_url() : '' ) ) . "\n";
 		}
 		$text = '# ' . Markdown::escape( get_bloginfo( 'name' ) ) . "\n\n> " . str_replace( "\n", "\n> ", $s['site_summary'] ?: get_bloginfo( 'description' ) ) . "\n\n";
 		$text .= 'Website: ' . home_url( '/' ) . "\n\nLanguage: " . get_bloginfo( 'language' ) . "\n\n";
 		if ( $s['guidance'] ) { $text .= $s['guidance'] . "\n\n"; }
-		if ( $s['mcp_enabled'] ) { $text .= "## AI tools\n\n- [MCP endpoint](" . rest_url( 'gz-ai/v1/mcp' ) . "): Search and retrieve public site content using MCP over HTTP POST.\n\n"; }
+		if ( $s['mcp_enabled'] ) { $text .= "## AI tools\n\n- [MCP endpoint](" . Endpoints::mcp_url() . "): Search and retrieve public site content using MCP over HTTP POST.\n\n"; }
 		$text .= "## Content\n\n";
 		$count = 0; $page = 1;
 		do {

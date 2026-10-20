@@ -14,7 +14,7 @@ final class Settings {
 			'post_types' => array( 'post', 'page' ), 'exclude_ids' => array(),
 			'site_summary' => '', 'guidance' => '', 'llms_custom' => '',
 			'llms_limit' => 100, 'rate_limit' => 60, 'comment_rate_limit' => 5,
-			'allowed_origins' => '', 'delete_data' => false,
+			'allowed_origins' => '', 'delete_data' => false, 'mcp_url_style' => 'standard',
 		);
 	}
 
@@ -30,6 +30,11 @@ final class Settings {
 	public static function sanitize( $input ): array {
 		$input = is_array( $input ) ? $input : array();
 		$out = self::defaults();
+		$out['mcp_url_style'] = 'short' === ( $input['mcp_url_style'] ?? '' ) ? 'short' : 'standard';
+		if ( 'short' === $out['mcp_url_style'] && Endpoints::short_mcp_unavailable_reason() ) {
+			$out['mcp_url_style'] = 'standard';
+			add_settings_error( self::OPTION, 'gz_ai_mcp_url', Endpoints::short_mcp_unavailable_reason() . ' The standard WordPress URL has been selected.', 'warning' );
+		}
 		foreach ( $out as $key => $value ) {
 			if ( is_bool( $value ) ) {
 				$out[ $key ] = ! empty( $input[ $key ] );

@@ -4,7 +4,7 @@ A self-contained WordPress plugin that gives AI assistants a useful introduction
 
 ## Install
 
-1. Upload `dist/gz-ai-discoverability-1.0.0.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
+1. Upload `dist/gz-ai-discoverability-1.0.1.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
 2. Open **Settings → AI Discoverability**.
 3. Choose content types, exclusions, and features; customize the introduction; then save.
 4. Add the displayed MCP endpoint to a compatible client using **Streamable HTTP**.
@@ -40,7 +40,12 @@ The plugin sends `Vary: Accept` on normal HTML responses and `Cache-Control: no-
 
 ## MCP
 
-Endpoint: `/wp-json/gz-ai/v1/mcp` (copy the full URL from Settings).
+Choose the advertised MCP URL under **Settings → AI Discoverability → MCP server**:
+
+- **Standard WordPress URL (default):** `/wp-json/gz-ai/v1/mcp`. `/wp-json/` is WordPress’s API entry point; `/gz-ai/v1/` is this plugin’s namespace and API version; `/mcp` identifies the endpoint. This structure avoids plugin conflicts and uses WordPress’s built-in routing. Plain permalinks use WordPress’s query URL instead.
+- **Short URL:** `/mcp` under your site’s home URL. MCP does not require a long URL; this alias uses the same WordPress REST handler, authentication, origin validation, and rate limits. It requires pretty permalinks and reserves the `/mcp` path. Existing WordPress content conflicts block selection; use the standard URL if another plugin or a web-server rule owns the path.
+
+Saving updates connection details, HTML discovery metadata, generated llms.txt links, the custom `{{mcp_url}}` placeholder, and `site_info`. The standard URL remains available when short is selected, preserving existing client connections. Switching back to standard removes the short alias; update clients using `/mcp`. Rewrite rules refresh automatically when this preference changes. Copy the full saved URL from Settings.
 
 Supports MCP **2026-07-28** with per-request metadata and `server/discover`, plus initialization clients speaking **2025-11-25**, **2025-06-18**, or **2025-03-26**. Uses stateless Streamable HTTP with JSON responses. GET/DELETE return 405; no legacy HTTP+SSE endpoint, session IDs, subscriptions, prompts, or server-initiated calls are implemented. Notifications supported by initialization clients receive an empty 202 response.
 
@@ -92,12 +97,15 @@ Run in a **disposable WordPress installation** with the plugin activated:
 ```sh
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/integration.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_urls.php --path=/path/to/test-wordpress
+# With the short URL selected:
+python3 tests/http_smoke.py http://127.0.0.1:8891 --mcp-path /mcp
 python3 scripts/build.py
 ```
 
 The integration suite creates and deletes fixtures and temporarily changes site/discussion/plugin settings. It suppresses test mail and restores settings afterward; never run it against a live site. The HTTP suite assumes pretty permalinks, default five tools, and the WordPress sample page unless overridden. It performs public reads/protocol probes and sends no comments.
 
-Verification performed: PHP lint; 54 real-WordPress integration checks; 21 HTTP checks; six additional checks for plain permalinks, a static front page, and activation lifecycle; and browser verification of the settings layout, saved values, and core settings submission. Coverage includes private/protected content, exclusions, Markdown conversion, MCP versions/validation, origin checks, moderation, login requirements, and rate limiting. A local MySQL binary crashed during setup, so live MySQL/MariaDB testing remains outstanding; the code uses WordPress APIs and MySQL-compatible prepared SQL.
+Verification performed: PHP lint; 54 real-WordPress integration checks; 11 URL-selection regression checks; 21 HTTP checks against each MCP address; six additional checks for plain permalinks, a static front page, and activation lifecycle; and browser verification of the settings layout, saved values, and core settings submission. Coverage includes private/protected content, exclusions, Markdown conversion, MCP versions/validation, origin checks, moderation, login requirements, and rate limiting. A local MySQL binary crashed during setup, so live MySQL/MariaDB testing remains outstanding; the code uses WordPress APIs and MySQL-compatible prepared SQL.
 
 ## References
 

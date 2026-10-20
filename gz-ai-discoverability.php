@@ -2,7 +2,7 @@
 /**
  * Plugin Name: GZ AI Discoverability
  * Description: Give AI assistants a curated llms.txt, clean Markdown, and a public-facing MCP server.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Requires at least: 6.6
  * Requires PHP: 8.1
  * Tested up to: 7.1.3
@@ -12,7 +12,7 @@
  */
 
 defined( 'ABSPATH' ) || exit;
-define( 'GZ_AI_VERSION', '1.0.0' );
+define( 'GZ_AI_VERSION', '1.0.1' );
 define( 'GZ_AI_FILE', __FILE__ );
 foreach ( array( 'settings', 'markdown', 'content', 'endpoints', 'mcp', 'admin' ) as $gz_ai_module ) {
 	require_once __DIR__ . '/includes/class-' . $gz_ai_module . '.php';
@@ -34,6 +34,7 @@ register_activation_hook( __FILE__, static function () {
 } );
 register_deactivation_hook( __FILE__, static function () {
 	// Remove our rules before flushing; init has already registered them this request.
+	GZ_AI\Endpoints::remove_mcp_alias();
 	global $wp_rewrite;
 	$wp_rewrite->extra_rules_top = array_filter( $wp_rewrite->extra_rules_top, static function ( $target ) {
 		return ! str_contains( $target, 'gz_ai_' );

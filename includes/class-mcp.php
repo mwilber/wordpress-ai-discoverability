@@ -209,7 +209,7 @@ final class MCP {
 				return is_wp_error( $post ) ? $post : Content::summary( $post ) + array( 'markdown' => Content::markdown( $post ), 'comments_open' => comments_open( $post->ID ) );
 			case 'site_info':
 				$s = Settings::get();
-				return array( 'name' => get_bloginfo( 'name' ), 'description' => $s['site_summary'] ?: get_bloginfo( 'description' ), 'url' => home_url( '/' ), 'language' => get_bloginfo( 'language' ), 'feed' => get_feed_link(), 'search_url' => home_url( '/?s={query}' ), 'llms_url' => $s['llms_enabled'] ? Endpoints::llms_url() : null, 'mcp_url' => rest_url( 'gz-ai/v1/mcp' ), 'content_types' => Content::types() );
+				return array( 'name' => get_bloginfo( 'name' ), 'description' => $s['site_summary'] ?: get_bloginfo( 'description' ), 'url' => home_url( '/' ), 'language' => get_bloginfo( 'language' ), 'feed' => get_feed_link(), 'search_url' => home_url( '/?s={query}' ), 'llms_url' => $s['llms_enabled'] ? Endpoints::llms_url() : null, 'mcp_url' => Endpoints::mcp_url(), 'content_types' => Content::types() );
 			case 'list_terms':
 				$taxonomy = $args['taxonomy'] ?? 'category'; $page = $args['page'] ?? 1; $limit = $args['per_page'] ?? 20;
 				// Restrict counts to content in the discovery scope, not private/excluded posts.

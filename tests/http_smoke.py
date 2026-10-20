@@ -9,9 +9,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("base", help="Local WordPress URL")
 parser.add_argument("--page-id", type=int, default=2)
 parser.add_argument("--slug", default="sample-page")
+parser.add_argument("--mcp-path", default="/wp-json/gz-ai/v1/mcp")
 args = parser.parse_args()
 base = args.base.rstrip("/")
 checks = 0
+mcp_path = args.mcp_path
 
 
 def request(path, data=None, headers=None, method=None):
@@ -49,18 +51,18 @@ expect(request("/llms.txt", method="HEAD")[2] == "", "HEAD has no response body"
 
 mcp_headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "tools/list"}
 body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}}}
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", json.dumps(body).encode(), mcp_headers)
+status, headers, text = request(mcp_path, json.dumps(body).encode(), mcp_headers)
 expect(status == 200 and len(json.loads(text)["result"]["tools"]) == 5, "MCP tools/list works over HTTP")
-expect(request("/wp-json/gz-ai/v1/mcp")[0] == 405, "MCP GET returns 405")
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", b"{bad-json", mcp_headers)
+expect(request(mcp_path)[0] == 405, "MCP GET returns 405")
+status, headers, text = request(mcp_path, b"{bad-json", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32700, "Malformed JSON retains the JSON-RPC error envelope")
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", b"[]", mcp_headers)
+status, headers, text = request(mcp_path, b"[]", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32600, "JSON-RPC batches are rejected")
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", json.dumps(body).encode(), {**mcp_headers, "Origin": "https://evil.example"})
+status, headers, text = request(mcp_path, json.dumps(body).encode(), {**mcp_headers, "Origin": "https://evil.example"})
 expect(status == 403 and not headers.get("Access-Control-Allow-Origin"), "Rejected origins receive no permissive CORS headers")
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", headers={"Origin": base}, method="OPTIONS")
+status, headers, text = request(mcp_path, headers={"Origin": base}, method="OPTIONS")
 expect(status == 204 and not text and headers.get("Access-Control-Allow-Origin") == base, "Same-origin preflight succeeds without a body")
 legacy = {"jsonrpc": "2.0", "method": "notifications/initialized"}
-status, headers, text = request("/wp-json/gz-ai/v1/mcp", json.dumps(legacy).encode(), {**mcp_headers, "MCP-Protocol-Version": "2025-11-25"})
+status, headers, text = request(mcp_path, json.dumps(legacy).encode(), {**mcp_headers, "MCP-Protocol-Version": "2025-11-25"})
 expect(status == 202 and not text, "MCP notifications return an empty 202")
 print(f"\n{checks} HTTP checks passed.")

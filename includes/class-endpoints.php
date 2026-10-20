@@ -3,8 +3,17 @@ namespace GZ_AI;
 defined( 'ABSPATH' ) || exit;
 
 final class Endpoints {
+	const MCP_ALIAS_RULE = '^mcp/?$';
+	const MCP_ALIAS_TARGET = 'index.php?rest_route=/gz-ai/v1/mcp';
+
 	public static function boot(): void {
 		add_action( 'init', array( self::class, 'rewrites' ) );
+		add_action( 'update_option_' . Settings::OPTION, static function ( $old, $new ) {
+			if ( ( $old['mcp_url_style'] ?? 'standard' ) !== ( $new['mcp_url_style'] ?? 'standard' ) ) {
+				self::rewrites();
+				flush_rewrite_rules( false );
+			}
+		}, 10, 2 );
 		add_filter( 'query_vars', static function ( $vars ) { return array_merge( $vars, array( 'gz_ai_llms', 'gz_ai_markdown' ) ); } );
 		add_action( 'template_redirect', array( self::class, 'serve' ), 0 );
 		add_action( 'wp_head', array( self::class, 'head' ), 2 );
@@ -34,8 +43,33 @@ final class Endpoints {
 	}
 
 	public static function rewrites(): void {
+		self::remove_mcp_alias();
 		add_rewrite_rule( '^llms\.txt$', 'index.php?gz_ai_llms=1', 'top' );
 		add_rewrite_rule( '^(.+?)\.md/?$', 'index.php?gz_ai_markdown=$matches[1]', 'top' );
+		if ( self::short_mcp_enabled() ) { add_rewrite_rule( self::MCP_ALIAS_RULE, self::MCP_ALIAS_TARGET, 'top' ); }
+	}
+
+	public static function remove_mcp_alias(): void {
+		global $wp_rewrite;
+		if ( isset( $wp_rewrite->extra_rules_top[ self::MCP_ALIAS_RULE ] ) && self::MCP_ALIAS_TARGET === $wp_rewrite->extra_rules_top[ self::MCP_ALIAS_RULE ] ) {
+			unset( $wp_rewrite->extra_rules_top[ self::MCP_ALIAS_RULE ] );
+		}
+	}
+
+	public static function short_mcp_enabled(): bool {
+		return 'short' === Settings::get()['mcp_url_style'] && (bool) get_option( 'permalink_structure' );
+	}
+
+	public static function short_mcp_unavailable_reason(): string {
+		if ( ! get_option( 'permalink_structure' ) ) { return 'The short /mcp URL requires pretty permalinks. Enable them under Settings → Permalinks first.'; }
+		if ( get_page_by_path( 'mcp', OBJECT, 'page' ) || url_to_postid( home_url( '/mcp' ) ) ) {
+			return 'Existing WordPress content uses /mcp. Rename that content or use the standard URL to avoid a conflict.';
+		}
+		return '';
+	}
+
+	public static function mcp_url(): string {
+		return self::short_mcp_enabled() ? home_url( '/mcp' ) : rest_url( 'gz-ai/v1/mcp' );
 	}
 
 	public static function markdown_url( \WP_Post $post ): string {
@@ -105,7 +139,7 @@ final class Endpoints {
 		if ( ! $s['head_links'] || ! Settings::public_enabled() ) { return $links; }
 		if ( $s['llms_enabled'] ) { $links[] = array( 'url' => Endpoints::llms_url(), 'rel' => 'describedby', 'type' => 'text/plain' ); }
 		if ( $s['markdown_enabled'] && is_singular() && Content::visible( get_queried_object() ) ) { $links[] = array( 'url' => self::markdown_url( get_queried_object() ), 'rel' => 'alternate', 'type' => 'text/markdown' ); }
-		if ( $s['mcp_enabled'] ) { $links[] = array( 'url' => rest_url( 'gz-ai/v1/mcp' ), 'rel' => 'mcp', 'type' => 'application/json' ); }
+		if ( $s['mcp_enabled'] ) { $links[] = array( 'url' => self::mcp_url(), 'rel' => 'mcp', 'type' => 'application/json' ); }
 		return $links;
 	}
 

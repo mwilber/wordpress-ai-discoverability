@@ -63,6 +63,17 @@ final class Admin {
 				<p class="gz-note">Stored block content is converted locally. Dynamic blocks and shortcodes that require execution are omitted. No external AI service or API key is needed.</p>
 			</section>
 			<section class="gz-card" id="gz-mcp"><div class="gz-section-title"><span class="gz-number">04</span><div><h2>From reading to interacting</h2><p>Choose what connected assistants can do.</p></div></div>
+				<?php $short_unavailable = Endpoints::short_mcp_unavailable_reason(); $url_style = $short_unavailable ? 'standard' : $s['mcp_url_style']; ?>
+				<fieldset class="gz-url-options"><legend>MCP server URL</legend>
+					<label class="gz-url-choice"><input type="radio" name="<?php echo esc_attr( Settings::OPTION ); ?>[mcp_url_style]" value="standard" <?php checked( $url_style, 'standard' ); ?> aria-describedby="gz-standard-url-help" /><span><strong>Standard WordPress URL (recommended)</strong><code><?php echo esc_html( rest_url( 'gz-ai/v1/mcp' ) ); ?></code></span></label>
+					<p id="gz-standard-url-help">The standard URL follows WordPress’s REST API structure:</p>
+					<ul class="gz-url-explanation"><li><code>/wp-json/</code> — WordPress’s API entry point.</li><li><code>/gz-ai/v1/</code> — this plugin’s namespace and API version.</li><li><code>/mcp</code> — the MCP endpoint.</li></ul>
+					<p class="gz-muted">This structure avoids conflicts with other plugins and uses WordPress’s built-in routing. With plain permalinks, WordPress provides a query URL instead.</p>
+					<label class="gz-url-choice"><input type="radio" name="<?php echo esc_attr( Settings::OPTION ); ?>[mcp_url_style]" value="short" <?php checked( $url_style, 'short' ); disabled( (bool) $short_unavailable ); ?> aria-describedby="gz-short-url-help" /><span><strong>Short URL</strong><code><?php echo esc_html( home_url( '/mcp' ) ); ?></code></span></label>
+					<p id="gz-short-url-help" class="gz-muted">MCP does not require a long URL. The shorter address is easier to share and uses the same server, permissions, and rate limits. It requires pretty permalinks and reserves <code>/mcp</code>; choose the standard URL if another plugin or a web-server rule already uses that path.</p>
+					<?php if ( $short_unavailable ) : ?><p class="gz-note"><?php echo esc_html( $short_unavailable ); ?></p><?php endif; ?>
+					<p class="gz-note">Save changes to update connection details, discovery metadata, and generated llms.txt links. The standard URL stays available for existing clients. Switching back to standard removes the short alias, so update clients using it.</p>
+				</fieldset>
 				<fieldset class="gz-tool-grid"><legend>Public tools</legend><?php foreach ( array( 'search' => 'Search the site', 'get_page' => 'Retrieve a page', 'list_pages' => 'Browse pages', 'site_info' => 'Read site information', 'list_terms' => 'Browse categories & tags' ) as $key => $label ) : ?><label><input type="checkbox" name="<?php echo esc_attr( Settings::OPTION ); ?>[tools][]" value="<?php echo esc_attr( $key ); ?>" <?php checked( in_array( $key, $s['tools'], true ) ); ?> /><?php echo esc_html( $label ); ?></label><?php endforeach; ?></fieldset>
 				<?php self::toggle( 'comments_enabled', 'Read public comments', 'Only approved comments; email addresses and IP addresses are excluded.' ); ?>
 				<?php self::toggle( 'comment_submission', 'Accept comment submissions', 'Allows the submit_comment tool. Requires user consent and follows Discussion settings.' ); ?>
@@ -79,7 +90,7 @@ final class Admin {
 				<p class="gz-note">Drafts, private content, and password-protected pages are always excluded, even for authenticated clients. For membership sites, exclude restricted page IDs or content types before enabling discovery.</p>
 			</section>
 			</main><aside class="gz-sidebar"><section class="gz-card gz-connections"><span class="gz-eyebrow">CONNECTION DETAILS</span><h2>Your site, connected.</h2><p>Use these addresses in your AI tools.</p>
-				<?php self::endpoint( 'llms.txt', $llms, $public && $s['llms_enabled'] ); self::endpoint( 'MCP server', rest_url( 'gz-ai/v1/mcp' ), $public && $s['mcp_enabled'] ); ?>
+				<?php self::endpoint( 'llms.txt', $llms, $public && $s['llms_enabled'] ); self::endpoint( 'MCP server', Endpoints::mcp_url(), $public && $s['mcp_enabled'] ); ?>
 				<div class="gz-small-rule"></div><span class="gz-eyebrow">QUICK START</span><ol><li>Choose your discovery features.</li><li>Save your settings.</li><li>Add the MCP URL to a compatible client using Streamable HTTP.</li></ol><a class="gz-text-link" href="<?php echo esc_url( $llms ); ?>" target="_blank" rel="noopener">Open saved llms.txt ↗</a></section>
 				<div class="gz-local"><span aria-hidden="true">↳</span><div><strong>Built to stay on your site.</strong><p>No API key. No external processing.<br>Your content, your controls.</p></div></div>
 			</aside></div><footer class="gz-save-bar"><span id="gz-save-status" aria-live="polite">Settings apply site-wide.</span><button class="button button-primary" type="submit">Save changes <span aria-hidden="true">↗</span></button></footer>
