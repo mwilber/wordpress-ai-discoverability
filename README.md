@@ -4,7 +4,7 @@ A self-contained WordPress plugin that gives AI assistants a useful introduction
 
 ## Install
 
-1. Upload `dist/gz-ai-discoverability-1.0.5.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
+1. Upload `dist/gz-ai-discoverability-1.0.6.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
 2. Open **Settings → AI Discoverability**.
 3. Choose content types, exclusions, and features; customize the introduction; then save.
 4. Add the displayed MCP endpoint to a compatible client using **Streamable HTTP**.
@@ -23,7 +23,7 @@ Requires WordPress 6.6+ and PHP 8.1+. Tested against **WordPress 7.1.3 / PHP 8.4
 
 Pretty permalinks must be enabled for `/llms.txt` and `.md` paths. On plain permalinks, `/?gz_ai_llms=1` and `/?page_id=123&gz_ai_markdown=1` (or `p=123` for posts) work, as do REST URLs using `?rest_route=`. The admin shows the correct URLs for the current configuration. A physical `llms.txt` file or a web-server rule can take precedence over WordPress; the plugin does not overwrite physical files.
 
-The plugin does not create or edit a physical robots.txt. A physical file, CDN response, or web-server rule that bypasses WordPress must be updated separately; purge cached robots.txt after upgrading. The llms.txt and MCP comments are discovery hints, not standardized robots directives, and do not change crawler permissions. The plugin advertises its direct MCP URL; it does not register `/.well-known/mcp` or change redirects on that path.
+The plugin does not create or edit a physical robots.txt. A physical file, CDN response, or web-server rule that bypasses WordPress must be updated separately; purge cached robots.txt after upgrading. The llms.txt and MCP comments are discovery hints, not standardized robots directives, and do not change crawler permissions. The plugin advertises its direct MCP URL and does not publish a discovery document at `/.well-known/mcp`. WordPress canonical redirects and 404 slug guessing are disabled for that exact unsupported path (including a trailing slash or query string), so a missing document stays HTTP 404 instead of redirecting to a similarly named post. Other paths retain normal WordPress redirect behavior. No permalink refresh is needed for this guard.
 
 ## Markdown
 
@@ -40,7 +40,9 @@ Conversion preserves headings, links, images, emphasis, nested lists, quotations
 
 Stored content is converted without running `the_content`, dynamic block callbacks, or shortcodes. This avoids executing content with the requesting user’s privileges. Content rendered only by dynamic blocks, page-builder metadata, JavaScript, or shortcodes needs a trusted adapter via the `gz_ai_markdown` filter. Theme headers, navigation, and footers are intentionally outside singular page content.
 
-The plugin sends `Vary: Accept` on normal HTML responses and `Cache-Control: no-store` on Markdown and MCP responses. If a CDN bypasses WordPress or ignores these headers, configure it to vary on `Accept`, bypass `.md` and discovery routes, and purge old copies after changing access settings.
+The plugin sends `Vary: Accept` on normal HTML responses. MCP, Markdown, and llms.txt responses send `Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private`, `Pragma: no-cache`, and an expired `Expires` timestamp. Plugin REST responses normalize conflicting PHP cache headers and remove ETag/Last-Modified validators before serving, including error, notification, and preflight responses. Other plugins' REST cache policies are left unchanged. Supplying `Expires` prevents [Apache mod_expires](https://httpd.apache.org/docs/2.4/mod/mod_expires.html) from appending its default lifetime; setting only `no-store` can otherwise leave an additional two-day `max-age`/`Expires` on some hosts.
+
+If a CDN bypasses WordPress or a server rule overwrites headers after PHP, its configuration must also exclude the MCP addresses from caching. Exclude `/wp-json/` and the short `/mcp` URL from a blanket two-day expiry policy, and cover query-style `rest_route` URLs on sites using plain permalinks. Configure CDN variation on `Accept`, bypass `.md` and discovery routes, and purge old cached responses/redirects after upgrading. The plugin does not edit Apache or CDN configuration.
 
 ## MCP
 
@@ -105,6 +107,7 @@ Run in a **disposable WordPress installation** with the plugin activated:
 ```sh
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/integration.php --path=/path/to/test-wordpress
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_rate_limit.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/transport_headers.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_urls.php --path=/path/to/test-wordpress
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/llms_index.php --path=/path/to/test-wordpress
@@ -126,7 +129,7 @@ python3 tests/http_rate_limit.py https://example.com --mcp-path /mcp --mcp-path 
 
 Each probe uses a fresh budget; wait 60 seconds between runs. The default probe sends 70 pings with 0.3 seconds between them and expects 60 successes and 10 HTTP 429s, with rate-limit headers. It only performs public reads. `--limit` accepts a different saved setting. Other clients sharing your IP also consume this budget.
 
-Verification performed for 1.0.5: PHP lint; 54 real-WordPress integration checks; 19 rolling-rate regression checks (including 70 pings crossing a clock-minute boundary, expiry, settings persistence, independent IPs, spoofed proxy headers, comment budgets, database-write failure, and cleanup); 22 robots.txt regression checks; 20 llms.txt index regression checks; 11 URL-selection regression checks; and 24 HTTP checks against each MCP address. Concurrent HTTP probes with eight clients across both URLs and both ping/tool methods return exactly 60 successes and 10 HTTP 429s. Earlier releases also passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission. A local MySQL binary crashes during initialization, so MySQL/MariaDB runtime testing remains outstanding; local runtime checks use WordPress’s SQLite integration.
+Verification performed for 1.0.6: PHP lint; 54 real-WordPress integration checks; 19 rolling-rate checks; 25 cache-header/redirect regression checks; 22 robots.txt checks; 20 llms.txt index checks; 11 URL-selection checks; and 34 HTTP checks against each MCP address. An Apache 2.4 proxy with `ExpiresDefault "access plus 2 days"` reproduced the old conflicting headers; 13 Apache/HTTP checks verified the corrected policy on both MCP URLs, the query URL, success/error/empty responses, and a large Markdown body, plus non-redirecting well-known URLs while an MCP-prefixed post existed. A concurrent probe through Apache with eight clients across both URLs and both ping/tool methods returned exactly 60 successes and 10 HTTP 429s with consistent cache headers. PHP tests also covered case-insensitive duplicate header removal, unaffected third-party routes, subdirectory sites, and disabled MCP. Earlier releases passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission. A local MySQL binary crashes during initialization, so MySQL/MariaDB runtime testing remains outstanding; local runtime checks use WordPress’s SQLite integration.
 
 ## References
 

@@ -42,7 +42,7 @@ final class MCP {
 	}
 
 	private static function response( $data, int $status = 200 ): \WP_REST_Response {
-		$headers = array( 'Cache-Control' => 'no-store', 'X-Content-Type-Options' => 'nosniff' );
+		$headers = array_merge( Endpoints::cache_headers(), array( 'X-Content-Type-Options' => 'nosniff' ) );
 		if ( 202 === $status || 204 === $status ) { $headers['X-GZ-AI-Raw'] = 'empty'; }
 		return new \WP_REST_Response( $data, $status, $headers );
 	}

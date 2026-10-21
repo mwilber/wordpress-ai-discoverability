@@ -4,6 +4,8 @@ import argparse
 import json
 import urllib.request
 import urllib.error
+from email.utils import parsedate_to_datetime
+import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument("base", help="Local WordPress URL")
@@ -32,13 +34,23 @@ def expect(condition, label):
     print("PASS", label)
 
 
+def expect_no_cache(headers, label):
+    policies = headers.get_all("Cache-Control", [])
+    expires = headers.get_all("Expires", [])
+    expect(len(policies) == 1 and "no-store" in policies[0] and "max-age=0" in policies[0]
+           and "172800" not in policies[0] and len(expires) == 1
+           and parsedate_to_datetime(expires[0]).timestamp() < time.time()
+           and "ETag" not in headers and "Last-Modified" not in headers, label)
+
+
 status, headers, text = request("/llms.txt")
 expect(status == 200 and text.startswith("# "), "llms.txt serves generated Markdown")
 expect("text/plain" in headers["Content-Type"], "llms.txt uses a text content type")
+expect_no_cache(headers, "llms.txt has one non-cacheable policy and an expired timestamp")
 for path in [f"/{args.slug}/index.md", f"/{args.slug}.md", f"/wp-json/gz-ai/v1/markdown/{args.page_id}"]:
     status, headers, text = request(path)
     expect(status == 200 and text.startswith("# ") and "text/markdown" in headers["Content-Type"], "Markdown route " + path)
-    expect("no-store" in headers.get("Cache-Control", ""), "Markdown is not stored in shared caches")
+    expect_no_cache(headers, "Markdown has one non-cacheable policy and an expired timestamp")
 status, headers, text = request(f"/{args.slug}/", headers={"Accept": "text/markdown"})
 expect(status == 200 and text.startswith("# ") and "text/markdown" in headers["Content-Type"], "Accept negotiation serves Markdown")
 status, headers, text = request(f"/{args.slug}/", headers={"Accept": "text/markdown;q=0, text/html;q=1"})
@@ -53,19 +65,39 @@ mcp_headers = {"Content-Type": "application/json", "Accept": "application/json, 
 body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}}}
 status, headers, text = request(mcp_path, json.dumps(body).encode(), mcp_headers)
 expect(status == 200 and len(json.loads(text)["result"]["tools"]) == 5, "MCP tools/list works over HTTP")
+expect_no_cache(headers, "Successful MCP response has no conflicting cache lifetime")
 expect(int(headers["X-RateLimit-Limit"]) >= 1 and int(headers["X-RateLimit-Remaining"]) >= 0 and int(headers["X-RateLimit-Reset"]) > 0, "Successful MCP responses include rate-limit headers")
-expect(request(mcp_path)[0] == 405, "MCP GET returns 405")
+status, headers, text = request(mcp_path)
+expect(status == 405, "MCP GET returns 405")
+expect_no_cache(headers, "MCP 405 has no conflicting cache lifetime")
 status, headers, text = request(mcp_path, b"{bad-json", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32700, "Malformed JSON retains the JSON-RPC error envelope")
+expect_no_cache(headers, "MCP parse errors have no conflicting cache lifetime")
 expect("X-RateLimit-Remaining" in headers, "Invalid POST requests consume budget and include rate-limit headers")
 status, headers, text = request(mcp_path, b"[]", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32600, "JSON-RPC batches are rejected")
 status, headers, text = request(mcp_path, json.dumps(body).encode(), {**mcp_headers, "Origin": "https://evil.example"})
 expect(status == 403 and not headers.get("Access-Control-Allow-Origin"), "Rejected origins receive no permissive CORS headers")
+expect_no_cache(headers, "MCP rejected origins have no conflicting cache lifetime")
 status, headers, text = request(mcp_path, headers={"Origin": base}, method="OPTIONS")
 expect(status == 204 and not text and headers.get("Access-Control-Allow-Origin") == base, "Same-origin preflight succeeds without a body")
+expect_no_cache(headers, "MCP preflight has no conflicting cache lifetime")
 expect("X-RateLimit-Remaining" in headers.get("Access-Control-Expose-Headers", "") and "Retry-After" in headers.get("Access-Control-Expose-Headers", ""), "Browser clients can read rate-limit headers")
 legacy = {"jsonrpc": "2.0", "method": "notifications/initialized"}
 status, headers, text = request(mcp_path, json.dumps(legacy).encode(), {**mcp_headers, "MCP-Protocol-Version": "2025-11-25"})
 expect(status == 202 and not text, "MCP notifications return an empty 202")
+expect_no_cache(headers, "MCP notifications have no conflicting cache lifetime")
+
+class NoRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+for path in ("/.well-known/mcp", "/.well-known/mcp/", "/.well-known/mcp?probe=1"):
+    try:
+        response = urllib.request.build_opener(NoRedirects).open(base + path, timeout=20)
+    except urllib.error.HTTPError as error:
+        response = error
+    with response:
+        expect(response.status == 404 and not response.headers.get("Location"), path + " stays 404 without a guessed redirect")
 print(f"\n{checks} HTTP checks passed.")

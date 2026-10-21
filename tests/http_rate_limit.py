@@ -7,6 +7,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from email.utils import parsedate_to_datetime
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("base", help="WordPress site URL")
@@ -47,7 +48,10 @@ def probe(index):
         remaining = int(response.headers["X-RateLimit-Remaining"])
         assert 0 <= remaining < args.limit, remaining
         assert int(response.headers["X-RateLimit-Reset"]) > 0
-        assert "no-store" in response.headers.get("Cache-Control", "")
+        policies = response.headers.get_all("Cache-Control", [])
+        expires = response.headers.get_all("Expires", [])
+        assert len(policies) == 1 and "no-store" in policies[0] and "max-age=0" in policies[0] and "172800" not in policies[0], policies
+        assert len(expires) == 1 and parsedate_to_datetime(expires[0]).timestamp() < time.time(), expires
         if response.status == 429:
             assert remaining == 0 and 1 <= int(response.headers["Retry-After"]) <= 60
             assert "error" in data

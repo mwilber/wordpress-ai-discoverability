@@ -5,6 +5,8 @@ defined( 'ABSPATH' ) || exit;
 final class Endpoints {
 	const MCP_ALIAS_RULE = '^mcp/?$';
 	const MCP_ALIAS_TARGET = 'index.php?rest_route=/gz-ai/v1/mcp';
+	const CACHE_CONTROL = 'no-store, no-cache, must-revalidate, max-age=0, private';
+	const EXPIRES = 'Wed, 11 Jan 1984 05:00:00 GMT';
 
 	public static function boot(): void {
 		add_action( 'init', array( self::class, 'rewrites' ) );
@@ -19,13 +21,35 @@ final class Endpoints {
 		add_action( 'wp_head', array( self::class, 'head' ), 2 );
 		add_filter( 'wp_headers', array( self::class, 'headers' ) );
 		add_filter( 'robots_txt', array( self::class, 'robots' ), 100, 2 );
+		// This plugin advertises a direct MCP URL, not a /.well-known/mcp document.
+		add_filter( 'do_redirect_guess_404_permalink', static function ( $guess ) {
+			return self::is_mcp_discovery_path() ? false : $guess;
+		} );
+		add_filter( 'redirect_canonical', static function ( $redirect ) {
+			return self::is_mcp_discovery_path() ? false : $redirect;
+		} );
+		add_filter( 'rest_post_dispatch', static function ( $response, $server, $request ) {
+			if ( self::is_plugin_rest_route( $request->get_route() ) ) {
+				$headers = $response->get_headers();
+				foreach ( array_keys( $headers ) as $name ) {
+					if ( in_array( strtolower( $name ), array( 'cache-control', 'expires', 'pragma', 'etag', 'last-modified' ), true ) ) { unset( $headers[ $name ] ); }
+				}
+				$response->set_headers( array_merge( $headers, self::cache_headers() ) );
+			}
+			return $response;
+		}, PHP_INT_MAX, 3 );
+		// Core and other plugins may emit PHP headers after rest_post_dispatch.
+		add_filter( 'rest_pre_serve_request', static function ( $served, $response, $request ) {
+			if ( self::is_plugin_rest_route( $request->get_route() ) ) { self::send_no_cache_headers(); }
+			return $served;
+		}, PHP_INT_MAX, 3 );
 		add_action( 'rest_api_init', static function () {
 			register_rest_route( 'gz-ai/v1', '/markdown/(?P<id>\d+)', array(
 				'methods' => 'GET', 'permission_callback' => '__return_true',
 				'callback' => static function ( $request ) {
 					$post = Content::find( (int) $request['id'] );
 					if ( ! Settings::get()['markdown_enabled'] || is_wp_error( $post ) ) { return new \WP_Error( 'not_found', 'Public page not found.', array( 'status' => 404 ) ); }
-					return new \WP_REST_Response( Content::markdown( $post ), 200, array( 'Content-Type' => 'text/markdown; charset=UTF-8', 'X-GZ-AI-Raw' => 'markdown', 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'no-store' ) );
+					return new \WP_REST_Response( Content::markdown( $post ), 200, array_merge( self::cache_headers(), array( 'Content-Type' => 'text/markdown; charset=UTF-8', 'X-GZ-AI-Raw' => 'markdown', 'X-Content-Type-Options' => 'nosniff' ) ) );
 				},
 			) );
 		} );
@@ -37,7 +61,31 @@ final class Endpoints {
 				return true;
 			}
 			return $served;
-		}, 10, 3 );
+		}, PHP_INT_MAX, 3 );
+	}
+
+	public static function cache_headers(): array {
+		// A past Expires also prevents mod_expires from adding its default max-age.
+		return array( 'Cache-Control' => self::CACHE_CONTROL, 'Expires' => self::EXPIRES, 'Pragma' => 'no-cache' );
+	}
+
+	public static function send_no_cache_headers(): void {
+		header_remove( 'Cache-Control' );
+		header_remove( 'Expires' );
+		header_remove( 'Pragma' );
+		header_remove( 'ETag' );
+		header_remove( 'Last-Modified' );
+		foreach ( self::cache_headers() as $name => $value ) { header( $name . ': ' . $value ); }
+	}
+
+	private static function is_plugin_rest_route( string $route ): bool {
+		return '/gz-ai/v1/mcp' === untrailingslashit( $route ) || (bool) preg_match( '~^/gz-ai/v1/markdown/\d+/?$~', $route );
+	}
+
+	public static function is_mcp_discovery_path(): bool {
+		$path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		$expected = wp_parse_url( home_url( '/.well-known/mcp' ), PHP_URL_PATH );
+		return is_string( $path ) && untrailingslashit( $path ) === untrailingslashit( $expected );
 	}
 
 	public static function robots( string $text, $public ): string {
@@ -133,7 +181,7 @@ final class Endpoints {
 		header( 'Content-Type: ' . ( $llms ? 'text/plain' : 'text/markdown' ) . '; charset=UTF-8' );
 		header( 'X-Content-Type-Options: nosniff' );
 		header( 'Vary: Accept', false );
-		nocache_headers();
+		self::send_no_cache_headers();
 		if ( $s['llms_enabled'] && Settings::public_enabled() ) { header( 'Link: <' . Endpoints::llms_url() . '>; rel="describedby"', false ); }
 		if ( 'HEAD' !== ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) {
 			echo null === $text ? 'Not found.' : $text; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- text response.

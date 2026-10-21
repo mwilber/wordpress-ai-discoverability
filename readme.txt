@@ -4,7 +4,7 @@ Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,11 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.6 =
+* Send one explicit no-store/max-age=0 policy and an expired Expires timestamp on MCP and Markdown responses, preventing Apache mod_expires from adding a default cache lifetime.
+* Normalize conflicting PHP cache headers on plugin REST responses, including errors, notifications and preflight responses.
+* Disable WordPress canonical/404 slug-guess redirects for the unsupported /.well-known/mcp path so it stays a 404 instead of redirecting to an unrelated post.
 
 = 1.0.5 =
 * Enforce per-IP MCP and comment limits over a rolling 60 seconds, closing the clock-minute reset gap.
