@@ -4,7 +4,7 @@ Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,10 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.4 =
+* Append labeled llms.txt and MCP discovery hints to WordPress-generated robots.txt while preserving existing rules and sitemap entries.
+* Add the enabled WordPress sitemap index only when no sitemap entry exists; leave physical robots.txt files untouched.
 
 = 1.0.3 =
 * Add configurable Posts per section for the generated llms.txt, defaulting to 20 (range 1–500).

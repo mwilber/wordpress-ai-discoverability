@@ -18,9 +18,7 @@ final class Endpoints {
 		add_action( 'template_redirect', array( self::class, 'serve' ), 0 );
 		add_action( 'wp_head', array( self::class, 'head' ), 2 );
 		add_filter( 'wp_headers', array( self::class, 'headers' ) );
-		add_filter( 'robots_txt', static function ( $text, $public ) {
-			return $public && Settings::get()['llms_enabled'] && Settings::public_enabled() ? $text . "\n# AI discovery\n# " . Endpoints::llms_url() . "\n" : $text;
-		}, 10, 2 );
+		add_filter( 'robots_txt', array( self::class, 'robots' ), 100, 2 );
 		add_action( 'rest_api_init', static function () {
 			register_rest_route( 'gz-ai/v1', '/markdown/(?P<id>\d+)', array(
 				'methods' => 'GET', 'permission_callback' => '__return_true',
@@ -40,6 +38,29 @@ final class Endpoints {
 			}
 			return $served;
 		}, 10, 3 );
+	}
+
+	public static function robots( string $text, $public ): string {
+		if ( ! $public || ! Settings::public_enabled() ) { return $text; }
+		$lines = array();
+		// Core and SEO plugins normally supply this. Never guess a disabled sitemap's URL.
+		if ( ! preg_match( '/^[\t ]*Sitemap[\t ]*:/mi', $text ) ) {
+			$sitemaps = wp_sitemaps_get_server();
+			if ( $sitemaps && $sitemaps->sitemaps_enabled() ) {
+				$lines[] = 'Sitemap: ' . esc_url_raw( $sitemaps->index->get_index_url() );
+			}
+		}
+		$s = Settings::get();
+		$discovery = array();
+		if ( $s['llms_enabled'] ) { $discovery[] = '# llms.txt: ' . self::llms_url(); }
+		if ( $s['mcp_enabled'] ) { $discovery[] = '# MCP endpoint: ' . self::mcp_url(); }
+		// Comments are discovery hints, not new robots directives or crawler permissions.
+		$discovery = array_filter( $discovery, static function ( $line ) use ( $text ) {
+			return ! preg_match( '/^[\t ]*' . preg_quote( $line, '/' ) . '[\t ]*\r?$/m', $text );
+		} );
+		if ( $discovery ) { $lines = array_merge( $lines, array( '# AI discovery' ), $discovery ); }
+		if ( ! $lines ) { return $text; }
+		return $text . ( '' !== $text && ! str_ends_with( $text, "\n" ) ? "\n" : '' ) . "\n" . implode( "\n", $lines ) . "\n";
 	}
 
 	public static function rewrites(): void {
