@@ -4,7 +4,7 @@ Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.1
+Stable tag: 1.0.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,15 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.3 =
+* Add configurable Posts per section for the generated llms.txt, defaulting to 20 (range 1–500).
+* Apply the limit to standard posts and each selected custom type, including limits above 50.
+
+= 1.0.2 =
+* List the 20 newest posts under Content, ordered by publication date.
+* Add selectable custom post type sections with 20 recent entries per type.
+* Retain shared content access restrictions and fully custom llms.txt support.
 
 = 1.0.1 =
 * Choose a standard or short MCP URL with inline explanations, automatic discovery updates, and path-conflict checks.

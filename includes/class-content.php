@@ -32,13 +32,14 @@ final class Content {
 	}
 
 	public static function query( array $args = array() ): array {
-		if ( ! Settings::public_enabled() || ! self::types() ) { return array( 'items' => array(), 'page' => 1, 'total' => 0, 'pages' => 0 ); }
+		$types = isset( $args['post_type'] ) ? array_values( array_intersect( self::types(), (array) $args['post_type'] ) ) : self::types();
+		if ( ! Settings::public_enabled() || ! $types ) { return array( 'items' => array(), 'page' => 1, 'total' => 0, 'pages' => 0 ); }
 		$page = max( 1, min( 10000, (int) ( $args['page'] ?? 1 ) ) );
 		$query = new \WP_Query( array(
-			'post_type' => self::types(), 'post_status' => 'publish', 'has_password' => false,
+			'post_type' => $types, 'post_status' => 'publish', 'has_password' => false,
 			'post__not_in' => Settings::get()['exclude_ids'], 's' => $args['query'] ?? '',
 			'posts_per_page' => max( 1, min( 50, (int) ( $args['per_page'] ?? 20 ) ) ),
-			'paged' => $page, 'orderby' => empty( $args['query'] ) ? 'ID' : 'relevance',
+			'paged' => $page, 'orderby' => ! empty( $args['newest_first'] ) ? array( 'date' => 'DESC', 'ID' => 'DESC' ) : ( empty( $args['query'] ) ? 'ID' : 'relevance' ),
 			'order' => 'ASC', 'ignore_sticky_posts' => true,
 		) );
 		$items = array();
@@ -96,16 +97,25 @@ final class Content {
 		$text .= 'Website: ' . home_url( '/' ) . "\n\nLanguage: " . get_bloginfo( 'language' ) . "\n\n";
 		if ( $s['guidance'] ) { $text .= $s['guidance'] . "\n\n"; }
 		if ( $s['mcp_enabled'] ) { $text .= "## AI tools\n\n- [MCP endpoint](" . Endpoints::mcp_url() . "): Search and retrieve public site content using MCP over HTTP POST.\n\n"; }
-		$text .= "## Content\n\n";
-		$count = 0; $page = 1;
-		do {
-			$result = self::query( array( 'page' => $page++, 'per_page' => min( 50, $s['llms_limit'] - $count ) ) );
-			foreach ( $result['items'] as $item ) {
+		$custom_types = array_intersect( $s['llms_post_types'], array_keys( Settings::custom_post_types() ), self::types() );
+		$limit = max( 1, min( 500, (int) $s['llms_posts_per_section'] ) );
+		$truncated = false;
+		foreach ( array_merge( array( 'post' ), $custom_types ) as $type ) {
+			$items = array(); $page = 1;
+			do {
+				$result = self::query( array( 'post_type' => $type, 'per_page' => min( 50, $limit ), 'page' => $page++, 'newest_first' => true ) );
+				$items = array_merge( $items, array_slice( $result['items'], 0, $limit - count( $items ) ) );
+			} while ( count( $items ) < $limit && $page <= $result['pages'] );
+			if ( 'post' !== $type && ! $items ) { continue; }
+			$heading = 'post' === $type ? 'Content' : get_post_type_object( $type )->labels->name;
+			$text .= '## ' . Markdown::escape( wp_strip_all_tags( $heading ) ) . "\n\n";
+			foreach ( $items as $item ) {
 				$text .= '- [' . Markdown::escape( $item['title'] ) . '](' . str_replace( array( '(', ')' ), array( '%28', '%29' ), $item['markdown_url'] ?: $item['url'] ) . '): ' . preg_replace( '/\s+/', ' ', $item['excerpt'] ) . "\n";
-				++$count;
 			}
-		} while ( $count < $s['llms_limit'] && $page <= $result['pages'] );
-		if ( $result['total'] > $count ) { $text .= "\nAdditional content is available through the site search" . ( $s['mcp_enabled'] ? ' and MCP list_pages tool (when enabled)' : '' ) . ".\n"; }
+			$truncated = $truncated || $result['total'] > count( $items );
+			$text .= "\n";
+		}
+		if ( $truncated ) { $text .= "Additional content is available through the site search" . ( $s['mcp_enabled'] ? ' and MCP list_pages tool (when enabled)' : '' ) . ".\n"; }
 		return $text;
 	}
 }

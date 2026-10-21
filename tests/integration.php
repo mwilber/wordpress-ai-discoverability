@@ -50,7 +50,7 @@ try {
 	$s = Settings::defaults(); $s['rate_limit'] = 600;
 	update_option( Settings::OPTION, $s ); update_option( 'blog_public', '1' );
 	foreach ( array( 'publish', 'draft', 'private', 'future' ) as $status ) {
-		$ids[ $status ] = wp_insert_post( array( 'post_title' => 'GZ Fixture ' . $status, 'post_type' => 'page', 'post_status' => $status, 'post_date' => 'future' === $status ? gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) : current_time( 'mysql' ), 'post_content' => '<h2>Useful heading</h2><p>Hello <strong>world</strong>.</p><ul><li>First</li><li>Second</li></ul><p>[gz_secret]</p>', 'comment_status' => 'open' ) );
+		$ids[ $status ] = wp_insert_post( array( 'post_title' => 'GZ Fixture ' . $status, 'post_type' => 'post', 'post_status' => $status, 'post_date' => 'future' === $status ? gmdate( 'Y-m-d H:i:s', time() + DAY_IN_SECONDS ) : current_time( 'mysql' ), 'post_content' => '<h2>Useful heading</h2><p>Hello <strong>world</strong>.</p><ul><li>First</li><li>Second</li></ul><p>[gz_secret]</p>', 'comment_status' => 'open' ) );
 	}
 	$ids['password'] = wp_insert_post( array( 'post_title' => 'GZ protected', 'post_type' => 'page', 'post_status' => 'publish', 'post_password' => 'secret', 'post_content' => 'Hidden password content' ) );
 	$ids['excluded'] = wp_insert_post( array( 'post_title' => 'GZ excluded', 'post_type' => 'page', 'post_status' => 'publish' ) );

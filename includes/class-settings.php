@@ -13,7 +13,7 @@ final class Settings {
 			'tools' => array( 'search', 'get_page', 'list_pages', 'site_info', 'list_terms' ),
 			'post_types' => array( 'post', 'page' ), 'exclude_ids' => array(),
 			'site_summary' => '', 'guidance' => '', 'llms_custom' => '',
-			'llms_limit' => 100, 'rate_limit' => 60, 'comment_rate_limit' => 5,
+			'llms_post_types' => array(), 'llms_posts_per_section' => 20, 'rate_limit' => 60, 'comment_rate_limit' => 5,
 			'allowed_origins' => '', 'delete_data' => false, 'mcp_url_style' => 'standard',
 		);
 	}
@@ -25,6 +25,12 @@ final class Settings {
 	public static function public_enabled(): bool {
 		$s = self::get();
 		return ! $s['respect_search_visibility'] || '1' === (string) get_option( 'blog_public' );
+	}
+
+	public static function custom_post_types(): array {
+		return array_filter( get_post_types( array( 'public' => true, '_builtin' => false ), 'objects' ), static function ( $type ) {
+			return is_post_type_viewable( $type );
+		} );
 	}
 
 	public static function sanitize( $input ): array {
@@ -45,9 +51,12 @@ final class Settings {
 		}
 		$out['post_types'] = array_values( array_intersect( (array) ( $input['post_types'] ?? array() ), array_keys( get_post_types( array( 'public' => true ) ) ) ) );
 		$out['post_types'] = array_values( array_diff( $out['post_types'], array( 'attachment' ) ) );
+		$out['llms_post_types'] = array_values( array_intersect( array_filter( (array) ( $input['llms_post_types'] ?? array() ), 'is_string' ), array_keys( self::custom_post_types() ), $out['post_types'] ) );
 		$out['tools'] = array_values( array_intersect( (array) ( $input['tools'] ?? array() ), self::defaults()['tools'] ) );
 		$out['exclude_ids'] = wp_parse_id_list( is_string( $input['exclude_ids'] ?? null ) ? $input['exclude_ids'] : '' );
-		foreach ( array( 'llms_limit' => 500, 'rate_limit' => 600, 'comment_rate_limit' => 60 ) as $key => $max ) {
+		$limit = $input['llms_posts_per_section'] ?? 20;
+		$out['llms_posts_per_section'] = is_scalar( $limit ) && is_numeric( $limit ) ? max( 1, min( 500, (int) $limit ) ) : 20;
+		foreach ( array( 'rate_limit' => 600, 'comment_rate_limit' => 60 ) as $key => $max ) {
 			$out[ $key ] = max( 1, min( $max, absint( $input[ $key ] ?? $out[ $key ] ) ) );
 		}
 		$origins = array();

@@ -4,7 +4,7 @@ A self-contained WordPress plugin that gives AI assistants a useful introduction
 
 ## Install
 
-1. Upload `dist/gz-ai-discoverability-1.0.1.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
+1. Upload `dist/gz-ai-discoverability-1.0.3.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
 2. Open **Settings → AI Discoverability**.
 3. Choose content types, exclusions, and features; customize the introduction; then save.
 4. Add the displayed MCP endpoint to a compatible client using **Streamable HTTP**.
@@ -13,7 +13,9 @@ Requires WordPress 6.6+ and PHP 8.1+. Tested against **WordPress 7.1.3 / PHP 8.4
 
 ## Discovery files and metadata
 
-- `/llms.txt` is generated from your site name, description, language, custom guidance, MCP endpoint, and up to 500 public content links. The default link limit is 100; pages beyond the index remain available through pagination in MCP.
+- `/llms.txt` is generated from your site name, description, language, custom guidance, and MCP endpoint. Its **Content** section lists recent standard posts, ordered by publication date from newest to oldest, with ID descending to break ties. **Posts per section** under the llms.txt settings controls the limit for every section (default **20**, range **1–500**). Existing installations without this setting default to 20; the old total link-limit setting is not reused.
+- Under **Settings → AI Discoverability → llms.txt**, select custom post types to include. Each selected public type receives a separate section using its display name (for example, **Products**), containing up to the configured number of its newest entries. Empty sections are omitted. Types must first be enabled in **Content & access**; that shared access scope and excluded IDs always apply. Unchecking a type in llms.txt does not remove it from Markdown or MCP.
+- Pages remain accessible through Markdown and MCP and do not consume the per-section allowance. Older entries are available through MCP pagination. Fully custom llms.txt content is left unchanged by these generated-index settings.
 - Replace the generated document entirely with custom Markdown. Supported placeholders: `{{site_name}}`, `{{site_url}}`, `{{description}}`, and `{{mcp_url}}`. The MCP placeholder is blank when MCP is disabled.
 - HTML `<link>` metadata advertises `rel="describedby"` for llms.txt, `rel="alternate" type="text/markdown"` for a page’s Markdown, and a `rel="mcp"` discovery hint. The MCP relation is an additional hint, not a universal client standard.
 - Markdown responses link back to llms.txt through an HTTP `Link` header. A comment in WordPress’s generated robots.txt points to llms.txt.
@@ -98,6 +100,7 @@ Run in a **disposable WordPress installation** with the plugin activated:
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/integration.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_urls.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/llms_index.php --path=/path/to/test-wordpress
 # With the short URL selected:
 python3 tests/http_smoke.py http://127.0.0.1:8891 --mcp-path /mcp
 python3 scripts/build.py
@@ -105,7 +108,7 @@ python3 scripts/build.py
 
 The integration suite creates and deletes fixtures and temporarily changes site/discussion/plugin settings. It suppresses test mail and restores settings afterward; never run it against a live site. The HTTP suite assumes pretty permalinks, default five tools, and the WordPress sample page unless overridden. It performs public reads/protocol probes and sends no comments.
 
-Verification performed: PHP lint; 54 real-WordPress integration checks; 11 URL-selection regression checks; 21 HTTP checks against each MCP address; six additional checks for plain permalinks, a static front page, and activation lifecycle; and browser verification of the settings layout, saved values, and core settings submission. Coverage includes private/protected content, exclusions, Markdown conversion, MCP versions/validation, origin checks, moderation, login requirements, and rate limiting. A local MySQL binary crashed during setup, so live MySQL/MariaDB testing remains outstanding; the code uses WordPress APIs and MySQL-compatible prepared SQL.
+Verification performed: PHP lint; 54 real-WordPress integration checks; 20 llms.txt index regression checks; 11 URL-selection regression checks; 21 HTTP checks against each MCP address; six additional checks for plain permalinks, a static front page, and activation lifecycle; and browser verification of the settings layout, saved values, and core settings submission. Coverage includes private/protected content, exclusions, Markdown conversion, MCP versions/validation, origin checks, moderation, login requirements, and rate limiting. A local MySQL binary crashed during setup, so live MySQL/MariaDB testing remains outstanding; the code uses WordPress APIs and MySQL-compatible prepared SQL.
 
 ## References
 
