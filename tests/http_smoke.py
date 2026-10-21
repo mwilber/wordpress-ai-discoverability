@@ -53,15 +53,18 @@ mcp_headers = {"Content-Type": "application/json", "Accept": "application/json, 
 body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {"_meta": {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {}}}}
 status, headers, text = request(mcp_path, json.dumps(body).encode(), mcp_headers)
 expect(status == 200 and len(json.loads(text)["result"]["tools"]) == 5, "MCP tools/list works over HTTP")
+expect(int(headers["X-RateLimit-Limit"]) >= 1 and int(headers["X-RateLimit-Remaining"]) >= 0 and int(headers["X-RateLimit-Reset"]) > 0, "Successful MCP responses include rate-limit headers")
 expect(request(mcp_path)[0] == 405, "MCP GET returns 405")
 status, headers, text = request(mcp_path, b"{bad-json", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32700, "Malformed JSON retains the JSON-RPC error envelope")
+expect("X-RateLimit-Remaining" in headers, "Invalid POST requests consume budget and include rate-limit headers")
 status, headers, text = request(mcp_path, b"[]", mcp_headers)
 expect(status == 400 and json.loads(text)["error"]["code"] == -32600, "JSON-RPC batches are rejected")
 status, headers, text = request(mcp_path, json.dumps(body).encode(), {**mcp_headers, "Origin": "https://evil.example"})
 expect(status == 403 and not headers.get("Access-Control-Allow-Origin"), "Rejected origins receive no permissive CORS headers")
 status, headers, text = request(mcp_path, headers={"Origin": base}, method="OPTIONS")
 expect(status == 204 and not text and headers.get("Access-Control-Allow-Origin") == base, "Same-origin preflight succeeds without a body")
+expect("X-RateLimit-Remaining" in headers.get("Access-Control-Expose-Headers", "") and "Retry-After" in headers.get("Access-Control-Expose-Headers", ""), "Browser clients can read rate-limit headers")
 legacy = {"jsonrpc": "2.0", "method": "notifications/initialized"}
 status, headers, text = request(mcp_path, json.dumps(legacy).encode(), {**mcp_headers, "MCP-Protocol-Version": "2025-11-25"})
 expect(status == 202 and not text, "MCP notifications return an empty 202")

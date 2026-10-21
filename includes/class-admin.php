@@ -81,7 +81,7 @@ final class Admin {
 				<?php self::toggle( 'comments_enabled', 'Read public comments', 'Only approved comments; email addresses and IP addresses are excluded.' ); ?>
 				<?php self::toggle( 'comment_submission', 'Accept comment submissions', 'Allows the submit_comment tool. Requires user consent and follows Discussion settings.' ); ?>
 				<?php self::toggle( 'force_moderation', 'Hold MCP comments for review', 'Recommended. New MCP comments enter the moderation queue; spam stays blocked.' ); ?>
-				<div class="gz-two-fields"><?php self::field( 'rate_limit', 'MCP requests / minute / IP', '1–600. Default: 60.', 'number' ); self::field( 'comment_rate_limit', 'Comments / minute / IP', '1–60. Default: 5.', 'number' ); ?></div>
+				<div class="gz-two-fields"><?php self::field( 'rate_limit', 'MCP requests / minute / IP', '1–600 in any 60 seconds. Includes pings and tool calls. Default: 60.', 'number' ); self::field( 'comment_rate_limit', 'Comments / minute / IP', '1–60 in any 60 seconds. Default: 5.', 'number' ); ?></div>
 				<?php self::field( 'allowed_origins', 'Additional browser origins', 'One exact origin per line, e.g. https://assistant.example. Your site origin and clients without an Origin header are allowed automatically.', 'textarea' ); ?>
 				<p class="gz-note">Transport: Streamable HTTP with JSON responses. Supports MCP 2026-07-28 and 2025 initialization clients. Read tools are public. Logged-in comments can use WordPress Application Passwords over HTTPS.</p>
 			</section>

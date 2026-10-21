@@ -27,6 +27,7 @@ final class MCP {
 					header( 'Access-Control-Allow-Origin: ' . $origin );
 					header( 'Access-Control-Allow-Methods: POST, OPTIONS' );
 					header( 'Access-Control-Allow-Headers: Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name, X-WP-Nonce, Authorization' );
+					header( 'Access-Control-Expose-Headers: X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After' );
 					header( 'Vary: Origin', false );
 				}
 			}
@@ -52,22 +53,6 @@ final class MCP {
 		return self::response( array( 'jsonrpc' => '2.0', 'id' => $id, 'error' => $error ), $status );
 	}
 
-	/** Atomic per-minute counter, without persisting client IP addresses. Proxy headers are not trusted. */
-	private static function limited( string $bucket, int $limit ): bool {
-		global $wpdb;
-		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? (string) $_SERVER['REMOTE_ADDR'] : 'unknown';
-		$slot = (int) floor( time() / 60 );
-		$key = 'gz_ai_rate_' . sprintf( '%012d', $slot ) . '_' . hash_hmac( 'sha256', $bucket . '|' . $ip, wp_salt( 'nonce' ) );
-		// INSERT/UPDATE is atomic across PHP workers; transients alone can race on comment writes.
-		$wpdb->query( $wpdb->prepare(
-			"INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'off') ON DUPLICATE KEY UPDATE option_value = CAST(option_value AS UNSIGNED) + 1", $key
-		) );
-		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $key ) );
-		if ( ! wp_next_scheduled( 'gz_ai_cleanup_rates' ) ) { wp_schedule_single_event( time() + 120, 'gz_ai_cleanup_rates' ); }
-		// Fail closed if the counter could not be stored.
-		return $count < 1 || $count > $limit;
-	}
-
 	public static function handle( \WP_REST_Request $request ): \WP_REST_Response {
 		$s = Settings::get();
 		if ( ! $s['mcp_enabled'] || ! Settings::public_enabled() ) { return self::error( null, -32601, 'MCP is unavailable.', 404 ); }
@@ -79,10 +64,20 @@ final class MCP {
 			$response->header( 'Allow', 'POST, OPTIONS' );
 			return $response;
 		}
-		if ( self::limited( 'requests', $s['rate_limit'] ) ) {
-			$response = self::error( null, -32600, 'Rate limit exceeded. Try again in one minute.', 429 );
-			$response->header( 'Retry-After', '60' ); return $response;
+		$rate = Rate_Limiter::consume( 'requests', $s['rate_limit'] );
+		if ( $rate['limited'] ) {
+			$response = self::error( null, -32600, 'Rate limit exceeded. Retry after the interval in Retry-After.', 429 );
+			$response->header( 'Retry-After', (string) max( 1, $rate['reset'] - time() ) );
+		} else {
+			$response = self::dispatch( $request );
 		}
+		$response->header( 'X-RateLimit-Limit', (string) $s['rate_limit'] );
+		$response->header( 'X-RateLimit-Remaining', (string) $rate['remaining'] );
+		$response->header( 'X-RateLimit-Reset', (string) $rate['reset'] );
+		return $response;
+	}
+
+	private static function dispatch( \WP_REST_Request $request ): \WP_REST_Response {
 		if ( strlen( $request->get_body() ) > 65536 ) { return self::error( null, -32600, 'Request exceeds 64 KB.', 413 ); }
 		if ( ! preg_match( '~^application/json(?:\s*;|$)~i', $request->get_header( 'content-type' ) ) ) { return self::error( null, -32600, 'Content-Type must be application/json.', 415 ); }
 		$accept = $request->get_header( 'accept' );
@@ -238,7 +233,7 @@ final class MCP {
 	private static function comment( \WP_Post $post, array $args ) {
 		$s = Settings::get();
 		if ( true !== ( $args['consent'] ?? false ) ) { return new \WP_Error( 'consent', 'Explicit user consent is required.' ); }
-		if ( self::limited( 'comments', $s['comment_rate_limit'] ) ) { return new \WP_Error( 'rate_limit', 'Comment rate limit exceeded. Try again in one minute.' ); }
+		if ( Rate_Limiter::consume( 'comments', $s['comment_rate_limit'] )['limited'] ) { return new \WP_Error( 'rate_limit', 'Comment rate limit exceeded. Try again in one minute.' ); }
 		if ( ! empty( $args['parent'] ) ) {
 			$parent = get_comment( $args['parent'] );
 			if ( ! $parent || (int) $parent->comment_post_ID !== $post->ID || '1' !== (string) $parent->comment_approved ) { return new \WP_Error( 'invalid_parent', 'Reply target must be an approved comment on this page.' ); }
@@ -254,9 +249,3 @@ final class MCP {
 		return array( 'id' => (int) $result->comment_ID, 'status' => '1' === (string) $result->comment_approved ? 'approved' : 'pending', 'message' => 'Comment received. Publication depends on site moderation.' );
 	}
 }
-
-add_action( 'gz_ai_cleanup_rates', static function () {
-	global $wpdb;
-	// All counters have a maximum useful life of one minute; delayed cleanup is safe.
-	$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s AND CAST(SUBSTRING(option_name, 12, 12) AS UNSIGNED) < %d", $wpdb->esc_like( 'gz_ai_rate_' ) . '%', (int) floor( time() / 60 ) - 1 ) );
-} );

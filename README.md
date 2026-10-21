@@ -4,7 +4,7 @@ A self-contained WordPress plugin that gives AI assistants a useful introduction
 
 ## Install
 
-1. Upload `dist/gz-ai-discoverability-1.0.4.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
+1. Upload `dist/gz-ai-discoverability-1.0.5.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
 2. Open **Settings → AI Discoverability**.
 3. Choose content types, exclusions, and features; customize the introduction; then save.
 4. Add the displayed MCP endpoint to a compatible client using **Streamable HTTP**.
@@ -90,9 +90,13 @@ Sites requiring logged-in commenters can use existing **WordPress Application Pa
 
 Origins are checked before processing MCP requests. Browser clients must use the site origin or an exact origin listed by the administrator. Clients without an Origin header are allowed. Arbitrary CORS reflection is removed for this route. IP limits use `REMOTE_ADDR`, not untrusted forwarding headers; behind a trusted proxy, configure the web server to supply the correct client IP. This is an application-level limit; use web-server controls for network-level abuse.
 
+MCP POST requests share one rolling **60-second** budget per IP across the standard and short URLs. All methods count, including `ping`, `initialize`, `tools/call`, notifications, and invalid POST bodies. OPTIONS preflight, unsupported HTTP methods, disabled endpoints, and rejected origins do not consume this budget. The default is 60 requests; the 61st request within the rolling interval receives HTTP **429**. Counts persist directly in the WordPress database and updates are atomic across workers, with no persistent object cache required. Database failures deny requests. Comment submissions have an additional, separate rolling budget (default 5).
+
+Every counted POST response includes `X-RateLimit-Limit` (the saved setting), `X-RateLimit-Remaining`, and `X-RateLimit-Reset` (Unix seconds when allowance next replenishes). HTTP 429 also includes `Retry-After` in seconds. Allowed browser clients can read these headers through CORS. Rejected requests do not extend the lockout. Version 1.0.5 replaces the previous clock-minute buckets, which could allow a short burst above the configured limit when it crossed a minute boundary.
+
 ## Data and lifecycle
 
-The plugin stores one per-site settings option and short-lived, HMAC-hashed rate counters. It does not send content to external services or maintain analytics. Comments use WordPress’s normal storage and privacy behavior. WP-Cron cleans expired counters; activation/deactivation and uninstall clear counters. Deactivation preserves settings. Uninstall removes settings only if the admin opts in. On multisite, configure each site separately; network-wide lifecycle behavior has not been certified.
+The plugin stores one per-site settings option and short-lived request timestamps keyed by HMAC-hashed IP/bucket identifiers; raw client IPs are not stored by the limiter. It does not send content to external services or maintain analytics. Comments use WordPress’s normal storage and privacy behavior. WP-Cron cleans expired rate logs and legacy counters; activation/deactivation and uninstall clear them. Deactivation preserves settings. Uninstall removes settings only if the admin opts in. On multisite, configure each site separately; network-wide lifecycle behavior has not been certified.
 
 ## Development and verification
 
@@ -100,6 +104,7 @@ Run in a **disposable WordPress installation** with the plugin activated:
 
 ```sh
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/integration.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_rate_limit.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_urls.php --path=/path/to/test-wordpress
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/llms_index.php --path=/path/to/test-wordpress
@@ -111,7 +116,17 @@ python3 scripts/build.py
 
 The integration suite creates and deletes fixtures and temporarily changes site/discussion/plugin settings. It suppresses test mail and restores settings afterward; never run it against a live site. The HTTP suite assumes pretty permalinks, default five tools, and the WordPress sample page unless overridden. It performs public reads/protocol probes and sends no comments.
 
-Verification performed: PHP lint; 54 real-WordPress integration checks; 22 robots.txt regression checks; 20 llms.txt index regression checks; 11 URL-selection regression checks; 21 HTTP checks against each MCP address; six additional checks for plain permalinks, a static front page, and activation lifecycle; and browser verification of the settings layout, saved values, and core settings submission. Coverage includes private/protected content, exclusions, Markdown conversion, MCP versions/validation, origin checks, moderation, login requirements, and rate limiting. A local MySQL binary crashed during setup, so live MySQL/MariaDB testing remains outstanding; the code uses WordPress APIs and MySQL-compatible prepared SQL.
+To reproduce the rate-limit probe, first allow 60 seconds without MCP traffic from your IP. Confirm the saved limit is 60, then run:
+
+```sh
+python3 tests/http_rate_limit.py https://example.com --mcp-path /mcp
+# Concurrent ping/tool calls across both URLs (short URL must be enabled):
+python3 tests/http_rate_limit.py https://example.com --mcp-path /mcp --mcp-path /wp-json/gz-ai/v1/mcp --method mixed --workers 8 --delay 0
+```
+
+Each probe uses a fresh budget; wait 60 seconds between runs. The default probe sends 70 pings with 0.3 seconds between them and expects 60 successes and 10 HTTP 429s, with rate-limit headers. It only performs public reads. `--limit` accepts a different saved setting. Other clients sharing your IP also consume this budget.
+
+Verification performed for 1.0.5: PHP lint; 54 real-WordPress integration checks; 19 rolling-rate regression checks (including 70 pings crossing a clock-minute boundary, expiry, settings persistence, independent IPs, spoofed proxy headers, comment budgets, database-write failure, and cleanup); 22 robots.txt regression checks; 20 llms.txt index regression checks; 11 URL-selection regression checks; and 24 HTTP checks against each MCP address. Concurrent HTTP probes with eight clients across both URLs and both ping/tool methods return exactly 60 successes and 10 HTTP 429s. Earlier releases also passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission. A local MySQL binary crashes during initialization, so MySQL/MariaDB runtime testing remains outstanding; local runtime checks use WordPress’s SQLite integration.
 
 ## References
 

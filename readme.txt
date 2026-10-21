@@ -4,7 +4,7 @@ Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,11 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.5 =
+* Enforce per-IP MCP and comment limits over a rolling 60 seconds, closing the clock-minute reset gap.
+* Share atomic database-backed budgets across workers, pings, tool calls, and both MCP URLs.
+* Add X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, and accurate Retry-After headers, readable by allowed browser clients.
 
 = 1.0.4 =
 * Append labeled llms.txt and MCP discovery hints to WordPress-generated robots.txt while preserving existing rules and sitemap entries.
