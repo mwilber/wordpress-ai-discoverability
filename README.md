@@ -4,7 +4,7 @@ A self-contained WordPress plugin that gives AI assistants a useful introduction
 
 ## Install
 
-1. Upload `dist/gz-ai-discoverability-1.0.6.zip` under **Plugins → Add Plugin → Upload Plugin** and activate it. Alternatively, copy this directory to `wp-content/plugins/gz-ai-discoverability`.
+1. [Download the latest plugin ZIP](https://github.com/mwilber/wordpress-ai-discoverability/releases/latest/download/wordpress-ai-discoverability.zip), upload it under **Plugins → Add Plugin → Upload Plugin**, and activate it. Alternatively, build locally with `python3 scripts/build.py` or copy this directory to `wp-content/plugins/gz-ai-discoverability`.
 2. Open **Settings → AI Discoverability**.
 3. Choose content types, exclusions, and features; customize the introduction; then save.
 4. Add the displayed MCP endpoint to a compatible client using **Streamable HTTP**.
@@ -105,13 +105,13 @@ The plugin stores one per-site settings option and short-lived request timestamp
 Run in a **disposable WordPress installation** with the plugin activated:
 
 ```sh
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/integration.php --path=/path/to/test-wordpress
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_rate_limit.php --path=/path/to/test-wordpress
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/transport_headers.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/integration.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/mcp_rate_limit.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/transport_headers.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/mcp_urls.php --path=/path/to/test-wordpress
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/llms_index.php --path=/path/to/test-wordpress
-GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/gz-wp-ai/tests/robots.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/mcp_urls.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/llms_index.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/robots.php --path=/path/to/test-wordpress
 # With the short URL selected:
 python3 tests/http_smoke.py http://127.0.0.1:8891 --mcp-path /mcp
 python3 scripts/build.py
@@ -130,6 +130,21 @@ python3 tests/http_rate_limit.py https://example.com --mcp-path /mcp --mcp-path 
 Each probe uses a fresh budget; wait 60 seconds between runs. The default probe sends 70 pings with 0.3 seconds between them and expects 60 successes and 10 HTTP 429s, with rate-limit headers. It only performs public reads. `--limit` accepts a different saved setting. Other clients sharing your IP also consume this budget.
 
 Verification performed for 1.0.6: PHP lint; 54 real-WordPress integration checks; 19 rolling-rate checks; 25 cache-header/redirect regression checks; 22 robots.txt checks; 20 llms.txt index checks; 11 URL-selection checks; and 34 HTTP checks against each MCP address. An Apache 2.4 proxy with `ExpiresDefault "access plus 2 days"` reproduced the old conflicting headers; 13 Apache/HTTP checks verified the corrected policy on both MCP URLs, the query URL, success/error/empty responses, and a large Markdown body, plus non-redirecting well-known URLs while an MCP-prefixed post existed. A concurrent probe through Apache with eight clients across both URLs and both ping/tool methods returned exactly 60 successes and 10 HTTP 429s with consistent cache headers. PHP tests also covered case-insensitive duplicate header removal, unaffected third-party routes, subdirectory sites, and disabled MCP. Earlier releases passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission. A local MySQL binary crashes during initialization, so MySQL/MariaDB runtime testing remains outstanding; local runtime checks use WordPress’s SQLite integration.
+
+## Publishing a release
+
+The GitHub Actions release workflow runs when a `vMAJOR.MINOR.PATCH` tag is pushed. It checks that the tag matches the plugin header, `GZ_AI_VERSION`, and `readme.txt` stable tag, then builds the tagged source and publishes a GitHub Release with generated notes, versioned and stable-name ZIPs, and SHA-256 checksums. ZIPs remain ignored by Git. The workflow uses GitHub's built-in token; no additional secrets are needed.
+
+Commit the workflow and any release changes to `master` before tagging. For the current 1.0.6 release:
+
+```sh
+git switch master
+git tag -a v1.0.6 -m "Release 1.0.6"
+git push origin master
+git push origin v1.0.6
+```
+
+Watch **Actions → Release plugin**, then find the downloads under **Releases**. For future releases, update all three version fields and the changelog before committing and tagging the new version. Keep published version tags fixed; corrections should receive a new version.
 
 ## References
 

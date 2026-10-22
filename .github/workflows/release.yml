@@ -1,0 +1,77 @@
+name: Release plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+              raise SystemExit('Release tags must use vMAJOR.MINOR.PATCH.')
+          version = tag[1:]
+          plugin = Path('gz-ai-discoverability.php').read_text()
+          checks = {
+              'plugin header': re.search(r'Version:\s*([\d.]+)', plugin),
+              'plugin constant': re.search(r"define\(\s*'GZ_AI_VERSION',\s*'([^']+)'", plugin),
+              'readme stable tag': re.search(r'Stable tag:\s*([\d.]+)', Path('readme.txt').read_text()),
+          }
+          for label, match in checks.items():
+              if not match or match.group(1) != version:
+                  raise SystemExit(f'{label} must match release tag {tag}.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\n')
+          PY
+
+      - name: Build and verify ZIP files
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 scripts/build.py
+          python3 -m zipfile -t "dist/wordpress-ai-discoverability-${VERSION}.zip"
+          cp "dist/wordpress-ai-discoverability-${VERSION}.zip" dist/wordpress-ai-discoverability.zip
+          cd dist
+          sha256sum "wordpress-ai-discoverability-${VERSION}.zip" wordpress-ai-discoverability.zip > SHA256SUMS
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "dist/wordpress-ai-discoverability-${VERSION}.zip" \
+            dist/wordpress-ai-discoverability.zip \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --title "GZ AI Discoverability ${VERSION}" \
+            --generate-notes
