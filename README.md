@@ -1,4 +1,4 @@
-# GZ AI Discoverability
+# AI Discoverability
 
 A self-contained WordPress plugin that gives AI assistants a useful introduction to your site, readable Markdown versions of public content, and MCP tools for public WordPress interactions. No API keys, external processing, Composer dependencies, or build step are required to run it.
 
@@ -13,7 +13,8 @@ Requires WordPress 6.6+ and PHP 8.1+. Tested against **WordPress 7.1.3 / PHP 8.4
 
 ## Discovery files and metadata
 
-- `/llms.txt` is generated from your site name, description, language, custom guidance, and MCP endpoint. Its **Content** section lists recent standard posts, ordered by publication date from newest to oldest, with ID descending to break ties. **Posts per section** under the llms.txt settings controls the limit for every section (default **20**, range **1–500**). Existing installations without this setting default to 20; the old total link-limit setting is not reused.
+- `/llms.txt` uses your WordPress site title and tagline in its heading (`# Site title - Tagline`); blank values are omitted without inserting sample branding. It also includes your description, language, custom guidance, and MCP endpoint. Its **Content** section lists recent standard posts, ordered by publication date from newest to oldest, with ID descending to break ties. **Posts per section** under the llms.txt settings controls the limit for every section (default **20**, range **1–500**). Existing installations without this setting default to 20; the old total link-limit setting is not reused.
+- `/llms-full.txt` streams the index followed by complete Markdown for every public entry in the shared content scope, including pages and enabled custom types. It is independent of the curated index's type selection and entry limit, and requires both llms.txt and Markdown to be enabled. It uses the same privacy and exclusion checks. With plain permalinks, use `/?gz_ai_llms=full`. Its URL is available in the admin, generated index, and MCP `site_info`. Rewrite rules refresh once automatically on upgrade.
 - Under **Settings → AI Discoverability → llms.txt**, select custom post types to include. Each selected public type receives a separate section using its display name (for example, **Products**), containing up to the configured number of its newest entries. Empty sections are omitted. Types must first be enabled in **Content & access**; that shared access scope and excluded IDs always apply. Unchecking a type in llms.txt does not remove it from Markdown or MCP.
 - Pages remain accessible through Markdown and MCP and do not consume the per-section allowance. Older entries are available through MCP pagination. Fully custom llms.txt content is left unchanged by these generated-index settings.
 - Replace the generated document entirely with custom Markdown. Supported placeholders: `{{site_name}}`, `{{site_url}}`, `{{description}}`, and `{{mcp_url}}`. The MCP placeholder is blank when MCP is disabled.
@@ -33,10 +34,13 @@ Additional access paths:
 
 ```text
 GET /about/                    Accept: text/markdown
+GET /about/?format=markdown
 GET /wp-json/gz-ai/v1/markdown/123
 ```
 
-Conversion preserves headings, links, images, emphasis, nested lists, quotations, code, tables, and published reusable blocks. Relative links become absolute. The source URL and modification time accompany the content.
+Conversion preserves headings, links, images, emphasis, nested lists, quotations, code, tables, and published reusable blocks. Relative links become absolute. The source URL and modification time accompany the content. Each document starts with YAML front matter containing `title`, publication `date`, `tags`, and `project` (a public project name, or `null`). Existing titles are retained. Spacer blocks and paragraphs containing only nonbreaking spaces are omitted; ordinary exclamation marks remain unescaped. Missing image labels fall back to the image title, public attachment metadata, figure caption, or readable filename; code contents remain literal.
+
+For `project` and `portfolio` entries, the export includes `live_site` and `client` when populated. Projects additionally include `production_link`, `repo_link`, and `tag_line`. Website and repository links must use HTTP(S). Posts and Updates can identify a related public project through one integer `project_id`; missing or invalid relationships remain `null`. No other custom fields are automatically exported. Site-specific mappings can still be added through `gz_ai_markdown`. MCP search excerpts decode HTML entities, including the trimming ellipsis; site descriptions normalize actual and literal CR/LF sequences into spaces.
 
 Stored content is converted without running `the_content`, dynamic block callbacks, or shortcodes. This avoids executing content with the requesting user’s privileges. Content rendered only by dynamic blocks, page-builder metadata, JavaScript, or shortcodes needs a trusted adapter via the `gz_ai_markdown` filter. Theme headers, navigation, and footers are intentionally outside singular page content.
 
@@ -106,6 +110,7 @@ Run in a **disposable WordPress installation** with the plugin activated:
 
 ```sh
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/integration.php --path=/path/to/test-wordpress
+GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/content_quality.php --path=/path/to/test-wordpress
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/mcp_rate_limit.php --path=/path/to/test-wordpress
 GZ_AI_TEST_ALLOW=1 wp eval-file /absolute/path/to/wordpress-ai-discoverability/tests/transport_headers.php --path=/path/to/test-wordpress
 python3 tests/http_smoke.py http://127.0.0.1:8891 --page-id 2 --slug sample-page
@@ -129,7 +134,9 @@ python3 tests/http_rate_limit.py https://example.com --mcp-path /mcp --mcp-path 
 
 Each probe uses a fresh budget; wait 60 seconds between runs. The default probe sends 70 pings with 0.3 seconds between them and expects 60 successes and 10 HTTP 429s, with rate-limit headers. It only performs public reads. `--limit` accepts a different saved setting. Other clients sharing your IP also consume this budget.
 
-Verification performed for 1.0.6: PHP lint; 54 real-WordPress integration checks; 19 rolling-rate checks; 25 cache-header/redirect regression checks; 22 robots.txt checks; 20 llms.txt index checks; 11 URL-selection checks; and 34 HTTP checks against each MCP address. An Apache 2.4 proxy with `ExpiresDefault "access plus 2 days"` reproduced the old conflicting headers; 13 Apache/HTTP checks verified the corrected policy on both MCP URLs, the query URL, success/error/empty responses, and a large Markdown body, plus non-redirecting well-known URLs while an MCP-prefixed post existed. A concurrent probe through Apache with eight clients across both URLs and both ping/tool methods returned exactly 60 successes and 10 HTTP 429s with consistent cache headers. PHP tests also covered case-insensitive duplicate header removal, unaffected third-party routes, subdirectory sites, and disabled MCP. Earlier releases passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission. A local MySQL binary crashes during initialization, so MySQL/MariaDB runtime testing remains outstanding; local runtime checks use WordPress’s SQLite integration.
+Verification for 1.0.7: PHP lint; 33 content-quality checks; 54 integration checks; 25 transport checks; 22 robots.txt checks; 20 llms.txt index checks; 11 MCP URL checks; and 45 HTTP checks against the standard MCP address (210 checks total). The new coverage includes blank title/tagline values, front matter, field allowlisting, image fallbacks, literal code, entity/line-break cleanup, a full export spanning more than 50 entries, feature/privacy controls, query URLs, HTTP methods, and HEAD responses. Tests use WordPress 7.1.3 with SQLite; MySQL/MariaDB runtime testing remains outstanding.
+
+Earlier verification for 1.0.6 also covered 19 rolling-rate checks and HTTP checks against both MCP addresses. An Apache 2.4 proxy with `ExpiresDefault "access plus 2 days"` reproduced the old conflicting headers; 13 Apache/HTTP checks verified the corrected policy on both MCP URLs, the query URL, success/error/empty responses, and a large Markdown body, plus non-redirecting well-known URLs while an MCP-prefixed post existed. A concurrent probe through Apache with eight clients across both URLs and both ping/tool methods returned exactly 60 successes and 10 HTTP 429s with consistent cache headers. Earlier releases passed six checks for plain permalinks, a static front page, and activation lifecycle, plus browser verification of settings layout and submission.
 
 ## Publishing a release
 
@@ -137,13 +144,13 @@ The GitHub Actions release workflow runs when a `vMAJOR.MINOR.PATCH` tag is push
 
 To release an already-pushed tag, open **Actions → Release plugin → Run workflow**, leave the workflow branch set to `master`, enter the existing tag (for example, `v1.0.6`), and run it. The manual trigger must first be committed and pushed to `master`. It checks out the requested tag and publishes ZIPs under the current project name even when an older build script uses the previous filename.
 
-Commit the workflow and any release changes to `master` before tagging. For the current 1.0.6 release:
+Commit the workflow and any release changes to `master` before tagging. For the current 1.0.7 release:
 
 ```sh
 git switch master
-git tag -a v1.0.6 -m "Release 1.0.6"
+git tag -a v1.0.7 -m "Release 1.0.7"
 git push origin master
-git push origin v1.0.6
+git push origin v1.0.7
 ```
 
 Watch **Actions → Release plugin**, then find the downloads under **Releases**. For future releases, update all three version fields and the changelog before committing and tagging the new version. Keep published version tags fixed; corrections should receive a new version.

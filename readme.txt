@@ -1,10 +1,10 @@
-=== GZ AI Discoverability ===
-Contributors: gz
+=== AI Discoverability ===
+Contributors: greenzeta
 Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,7 +12,7 @@ Publish a customizable llms.txt, serve public pages as Markdown, and connect AI 
 
 == Description ==
 
-GZ AI Discoverability provides a responsive settings page with feature toggles, an editable llms.txt and saved preview, Markdown conversion, and a public MCP server.
+AI Discoverability by GreenZeta provides a responsive settings page with feature toggles, an editable llms.txt and saved preview, Markdown conversion, and a public MCP server.
 
 Tools include search, page retrieval, content browsing, categories and tags, site metadata, and optional approved-comment reading and moderated comment submission. No API key or external AI processing is required.
 
@@ -50,6 +50,12 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.7 =
+* Include the WordPress tagline in the generated llms.txt heading and update plugin branding and author attribution.
+* Add Markdown front matter, project/portfolio fields, image label fallbacks, and spacer/punctuation cleanup.
+* Decode MCP excerpt entities and normalize site description line breaks.
+* Serve llms-full.txt and ?format=markdown using the existing public content scope and feature controls.
 
 = 1.0.6 =
 * Send one explicit no-store/max-age=0 policy and an expired Expires timestamp on MCP and Markdown responses, preventing Apache mod_expires from adding a default cache lifetime.

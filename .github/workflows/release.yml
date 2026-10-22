@@ -84,5 +84,5 @@ jobs:
             dist/wordpress-ai-discoverability.zip \
             dist/SHA256SUMS \
             --verify-tag \
-            --title "GZ AI Discoverability ${VERSION}" \
+            --title "AI Discoverability ${VERSION}" \
             --generate-notes

@@ -1,18 +1,19 @@
 <?php
 /**
- * Plugin Name: GZ AI Discoverability
+ * Plugin Name: AI Discoverability
  * Description: Give AI assistants a curated llms.txt, clean Markdown, and a public-facing MCP server.
- * Version: 1.0.6
+ * Version: 1.0.7
  * Requires at least: 6.6
  * Requires PHP: 8.1
  * Tested up to: 7.1.3
- * Author: GZ
+ * Author: GreenZeta
+ * Author URI: https://greenzeta.com/
  * License: GPL-2.0-or-later
  * Text Domain: gz-ai-discoverability
  */
 
 defined( 'ABSPATH' ) || exit;
-define( 'GZ_AI_VERSION', '1.0.6' );
+define( 'GZ_AI_VERSION', '1.0.7' );
 define( 'GZ_AI_FILE', __FILE__ );
 foreach ( array( 'settings', 'markdown', 'content', 'endpoints', 'rate-limiter', 'mcp', 'admin' ) as $gz_ai_module ) {
 	require_once __DIR__ . '/includes/class-' . $gz_ai_module . '.php';

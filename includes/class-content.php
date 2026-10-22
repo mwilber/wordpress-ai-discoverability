@@ -3,6 +3,13 @@ namespace GZ_AI;
 defined( 'ABSPATH' ) || exit;
 
 final class Content {
+	/** Normalize human-readable metadata without changing stored content or code samples. */
+	public static function plain_text( string $text ): string {
+		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$text = str_replace( array( '\\r\\n', '\\n', '\\r', "\u{00a0}" ), ' ', $text );
+		return trim( preg_replace( '/\s+/u', ' ', wp_strip_all_tags( $text ) ) );
+	}
+
 	public static function types(): array {
 		$types = array_intersect( Settings::get()['post_types'], array_keys( get_post_types( array( 'public' => true ) ) ) );
 		return array_values( array_filter( $types, static function ( $type ) {
@@ -51,10 +58,10 @@ final class Content {
 
 	public static function summary( \WP_Post $post ): array {
 		return array(
-			'id' => $post->ID, 'title' => html_entity_decode( wp_strip_all_tags( $post->post_title ), ENT_QUOTES, 'UTF-8' ),
+			'id' => $post->ID, 'title' => self::plain_text( $post->post_title ),
 			'url' => get_permalink( $post ), 'type' => $post->post_type,
 			'markdown_url' => Settings::get()['markdown_enabled'] ? Endpoints::markdown_url( $post ) : null,
-			'excerpt' => wp_trim_words( wp_strip_all_tags( strip_shortcodes( $post->post_excerpt ?: $post->post_content ) ), 45 ),
+			'excerpt' => self::plain_text( wp_trim_words( self::plain_text( strip_shortcodes( $post->post_excerpt ?: $post->post_content ) ), 45 ) ),
 			'modified' => get_post_modified_time( 'c', true, $post ),
 		);
 	}
@@ -63,15 +70,56 @@ final class Content {
 		$summary = self::summary( $post );
 		// Use stored content, never the_content: logged-in requests must not render member-only shortcodes.
 		$html = self::expand_blocks( parse_blocks( $post->post_content ) );
-		$text = '# ' . Markdown::escape( $summary['title'] ) . "\n\n";
+		$project = self::project( $post );
+		$terms = get_the_terms( $post, 'post_tag' );
+		$tags = is_array( $terms ) ? array_map( static function ( $term ) { return self::plain_text( $term->name ); }, $terms ) : array();
+		$metadata = array( 'title' => $summary['title'], 'date' => get_post_time( 'c', true, $post ), 'tags' => array_values( $tags ), 'project' => $project ? self::plain_text( $project->post_title ) : null );
+		$text = "---\n";
+		foreach ( $metadata as $key => $value ) {
+			// JSON scalars and arrays are valid YAML; quoting prevents metadata from creating new keys.
+			$text .= $key . ': ' . wp_json_encode( $value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES ) . "\n";
+		}
+		$text .= "---\n\n# " . Markdown::escape( $summary['title'] ) . "\n\n";
 		$text .= 'Source: ' . $summary['url'] . "\n" . 'Last updated: ' . $summary['modified'] . "\n\n";
+		if ( $project && $project->ID !== $post->ID ) { $text .= 'Project: [' . Markdown::escape( self::plain_text( $project->post_title ) ) . '](' . esc_url_raw( get_permalink( $project ) ) . ")\n\n"; }
+		$text .= self::project_fields( $post );
 		$text .= Markdown::convert( strip_shortcodes( $html ), $summary['url'] );
 		return (string) apply_filters( 'gz_ai_markdown', $text, $post );
+	}
+
+	private static function project( \WP_Post $post ): ?\WP_Post {
+		if ( 'project' === $post->post_type ) { return $post; }
+		if ( ! in_array( $post->post_type, array( 'post', 'update' ), true ) ) { return null; }
+		// Relationships are resolved through the same public-content scope as get_page.
+		$id = get_post_meta( $post->ID, 'project_id', true );
+		if ( ! is_scalar( $id ) || ! ctype_digit( (string) $id ) || (int) $id < 1 ) { return null; }
+		$project = get_post( (int) $id );
+		if ( $project && 'project' === $project->post_type && self::visible( $project ) ) { return $project; }
+		return null;
+	}
+
+	private static function project_fields( \WP_Post $post ): string {
+		if ( ! in_array( $post->post_type, array( 'project', 'portfolio' ), true ) ) { return ''; }
+		$text = '';
+		// Deliberate allowlist: never enumerate arbitrary or protected post metadata.
+		$fields = array( 'live_site' => 'Live site', 'client' => 'Client' );
+		if ( 'project' === $post->post_type ) { $fields += array( 'production_link' => 'Website', 'repo_link' => 'Repository', 'tag_line' => 'Tagline' ); }
+		foreach ( $fields as $key => $label ) {
+			$value = get_post_meta( $post->ID, $key, true );
+			if ( ! is_string( $value ) || '' === self::plain_text( $value ) ) { continue; }
+			if ( in_array( $key, array( 'live_site', 'production_link', 'repo_link' ), true ) ) {
+				$url = esc_url_raw( trim( $value ), array( 'http', 'https' ) );
+				if ( ! $url || ! in_array( wp_parse_url( $url, PHP_URL_SCHEME ), array( 'http', 'https' ), true ) ) { continue; }
+				$text .= $label . ': <' . $url . ">\n\n";
+			} else { $text .= $label . ': ' . Markdown::escape( self::plain_text( $value ) ) . "\n\n"; }
+		}
+		return $text;
 	}
 
 	private static function expand_blocks( array $blocks, array $seen = array() ): string {
 		$html = '';
 		foreach ( $blocks as $block ) {
+			if ( 'core/spacer' === $block['blockName'] ) { continue; }
 			if ( 'core/block' === $block['blockName'] && ! empty( $block['attrs']['ref'] ) ) {
 				$id = (int) $block['attrs']['ref'];
 				$reusable = get_post( $id );
@@ -93,8 +141,12 @@ final class Content {
 		if ( '' !== trim( $s['llms_custom'] ) ) {
 			return strtr( $s['llms_custom'], array( '{{site_name}}' => get_bloginfo( 'name' ), '{{site_url}}' => home_url( '/' ), '{{description}}' => get_bloginfo( 'description' ), '{{mcp_url}}' => $s['mcp_enabled'] ? Endpoints::mcp_url() : '' ) ) . "\n";
 		}
-		$text = '# ' . Markdown::escape( get_bloginfo( 'name' ) ) . "\n\n> " . str_replace( "\n", "\n> ", $s['site_summary'] ?: get_bloginfo( 'description' ) ) . "\n\n";
+		$name = self::plain_text( get_bloginfo( 'name' ) );
+		$tagline = self::plain_text( get_bloginfo( 'description' ) );
+		$heading = implode( ' - ', array_filter( array( $name, $tagline ), static function ( $value ) { return '' !== $value; } ) );
+		$text = '# ' . Markdown::escape( $heading ) . "\n\n> " . self::plain_text( $s['site_summary'] ?: get_bloginfo( 'description' ) ) . "\n\n";
 		$text .= 'Website: ' . home_url( '/' ) . "\n\nLanguage: " . get_bloginfo( 'language' ) . "\n\n";
+		if ( $s['markdown_enabled'] ) { $text .= '[Full content in Markdown](' . Endpoints::llms_full_url() . ")\n\n"; }
 		if ( $s['guidance'] ) { $text .= $s['guidance'] . "\n\n"; }
 		if ( $s['mcp_enabled'] ) { $text .= "## AI tools\n\n- [MCP endpoint](" . Endpoints::mcp_url() . "): Search and retrieve public site content using MCP over HTTP POST.\n\n"; }
 		$custom_types = array_intersect( $s['llms_post_types'], array_keys( Settings::custom_post_types() ), self::types() );
@@ -117,5 +169,25 @@ final class Content {
 		}
 		if ( $truncated ) { $text .= "Additional content is available through the site search" . ( $s['mcp_enabled'] ? ' and MCP list_pages tool (when enabled)' : '' ) . ".\n"; }
 		return $text;
+	}
+
+	/** Stream every visible content type; the curated index limit does not apply. */
+	public static function llms_full(): \Generator {
+		$s = Settings::get();
+		if ( ! Settings::public_enabled() || ! $s['llms_enabled'] || ! $s['markdown_enabled'] ) { return; }
+		yield self::llms();
+		$types = self::types();
+		if ( ! $types ) { return; }
+		$page = 1;
+		do {
+			$query = new \WP_Query( array(
+				'post_type' => $types, 'post_status' => 'publish', 'has_password' => false,
+				'post__not_in' => $s['exclude_ids'], 'posts_per_page' => 50, 'paged' => $page++,
+				'orderby' => 'ID', 'order' => 'ASC', 'ignore_sticky_posts' => true, 'no_found_rows' => true,
+			) );
+			foreach ( $query->posts as $post ) {
+				if ( self::visible( $post ) ) { yield "\n\n" . self::markdown( $post ); }
+			}
+		} while ( count( $query->posts ) === 50 );
 	}
 }

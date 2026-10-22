@@ -10,6 +10,13 @@ final class Endpoints {
 
 	public static function boot(): void {
 		add_action( 'init', array( self::class, 'rewrites' ) );
+		add_action( 'init', static function () {
+			// Refresh the new full-text route once on upgrade, without manual permalink saving.
+			if ( '1' !== get_option( 'gz_ai_rewrite_version' ) ) {
+				flush_rewrite_rules( false );
+				update_option( 'gz_ai_rewrite_version', '1', false );
+			}
+		}, 20 );
 		add_action( 'update_option_' . Settings::OPTION, static function ( $old, $new ) {
 			if ( ( $old['mcp_url_style'] ?? 'standard' ) !== ( $new['mcp_url_style'] ?? 'standard' ) ) {
 				self::rewrites();
@@ -113,6 +120,7 @@ final class Endpoints {
 
 	public static function rewrites(): void {
 		self::remove_mcp_alias();
+		add_rewrite_rule( '^llms-full\.txt$', 'index.php?gz_ai_llms=full', 'top' );
 		add_rewrite_rule( '^llms\.txt$', 'index.php?gz_ai_llms=1', 'top' );
 		add_rewrite_rule( '^(.+?)\.md/?$', 'index.php?gz_ai_markdown=$matches[1]', 'top' );
 		if ( self::short_mcp_enabled() ) { add_rewrite_rule( self::MCP_ALIAS_RULE, self::MCP_ALIAS_TARGET, 'top' ); }
@@ -154,18 +162,27 @@ final class Endpoints {
 		return get_option( 'permalink_structure' ) ? home_url( '/llms.txt' ) : add_query_arg( 'gz_ai_llms', '1', home_url( '/' ) );
 	}
 
+	public static function llms_full_url(): string {
+		return get_option( 'permalink_structure' ) ? home_url( '/llms-full.txt' ) : add_query_arg( 'gz_ai_llms', 'full', home_url( '/' ) );
+	}
+
 	public static function serve(): void {
 		$llms = get_query_var( 'gz_ai_llms' );
 		$md = get_query_var( 'gz_ai_markdown' );
+		$format = isset( $_GET['format'] ) && is_string( $_GET['format'] ) && 'markdown' === wp_unslash( $_GET['format'] );
 		$accept = isset( $_SERVER['HTTP_ACCEPT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ACCEPT'] ) ) : '';
 		$negotiated = ! $md && is_singular() && self::prefers_markdown( $accept );
-		if ( ! $llms && ! $md && ! $negotiated ) { return; }
+		if ( ! $llms && ! $md && ! $negotiated && ! $format ) { return; }
 		if ( ! in_array( $_SERVER['REQUEST_METHOD'] ?? 'GET', array( 'GET', 'HEAD' ), true ) ) {
 			status_header( 405 ); header( 'Allow: GET, HEAD' ); header( 'Content-Type: text/plain; charset=UTF-8' ); exit;
 		}
 		$s = Settings::get();
 		$text = null;
-		if ( $llms && $s['llms_enabled'] && Settings::public_enabled() ) { $text = Content::llms(); }
+		if ( $llms && $s['llms_enabled'] && Settings::public_enabled() ) {
+			if ( 'full' === $llms ) {
+				if ( $s['markdown_enabled'] ) { $text = Content::llms_full(); }
+			} else { $text = Content::llms(); }
+		}
 		if ( ! $llms && $s['markdown_enabled'] && Settings::public_enabled() ) {
 			if ( $md && '1' !== $md ) {
 				$path = 'index' === $md ? '/' : preg_replace( '~/index$~', '/', (string) $md );
@@ -174,7 +191,7 @@ final class Endpoints {
 				else { $post = Content::find( 0, $url ); }
 			} elseif ( '1' === (string) $md ) {
 				$post = Content::find( (int) get_query_var( 'p' ) ?: (int) get_query_var( 'page_id' ) );
-			} else { $post = get_queried_object(); }
+			} else { $post = is_singular() ? get_queried_object() : null; }
 			if ( $post instanceof \WP_Post && Content::visible( $post ) ) { $text = Content::markdown( $post ); }
 		}
 		status_header( null === $text ? 404 : 200 );
@@ -184,7 +201,9 @@ final class Endpoints {
 		self::send_no_cache_headers();
 		if ( $s['llms_enabled'] && Settings::public_enabled() ) { header( 'Link: <' . Endpoints::llms_url() . '>; rel="describedby"', false ); }
 		if ( 'HEAD' !== ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ) {
-			echo null === $text ? 'Not found.' : $text; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- text response.
+			if ( $text instanceof \Generator ) {
+				foreach ( $text as $chunk ) { echo $chunk; } // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- text response.
+			} else { echo null === $text ? 'Not found.' : $text; } // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- text response.
 		}
 		exit;
 	}

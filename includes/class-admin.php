@@ -37,7 +37,7 @@ final class Admin {
 		$s = Settings::get(); $public = Settings::public_enabled();
 		$llms = get_option( 'permalink_structure' ) ? home_url( '/llms.txt' ) : add_query_arg( 'gz_ai_llms', '1', home_url( '/' ) );
 		?><div class="wrap gz-ai">
-			<header class="gz-header"><div class="gz-brand"><span class="gz-mark" aria-hidden="true">✳</span><span>GZ / WORDPRESS TOOLS</span></div><span class="gz-version">v<?php echo esc_html( GZ_AI_VERSION ); ?></span></header>
+			<header class="gz-header"><div class="gz-brand"><span class="gz-mark" aria-hidden="true">✳</span><span>GREENZETA / WORDPRESS TOOLS</span></div><span class="gz-version">v<?php echo esc_html( GZ_AI_VERSION ); ?></span></header>
 			<div class="gz-heading"><div><span class="gz-eyebrow">A BETTER WAY TO BE FOUND</span><h1>Make your site<br><span>AI-readable.</span></h1><p>Give AI assistants a clear path to your content.<br>Your website, ready for the next way people search.</p></div><div class="gz-orbit" aria-hidden="true"><span class="gz-orbit-label gz-orbit-one">llms.txt</span><span class="gz-orbit-core">✳</span><span class="gz-orbit-label gz-orbit-two">Markdown</span><span class="gz-orbit-label gz-orbit-three">MCP</span></div></div>
 			<?php if ( ! $public ) : ?><div class="notice notice-warning inline"><p>Discovery is paused because Settings → Reading discourages search engines. Change site visibility or the visibility setting below to publish these endpoints.</p></div><?php endif; ?>
 			<?php if ( ! get_option( 'permalink_structure' ) ) : ?><div class="notice notice-info inline"><p>Plain permalinks are active. Query URLs work now. Enable pretty permalinks under Settings → Permalinks to serve /llms.txt and /page/index.md.</p></div><?php endif; ?>
@@ -93,11 +93,11 @@ final class Admin {
 				<p class="gz-note">Drafts, private content, and password-protected pages are always excluded, even for authenticated clients. For membership sites, exclude restricted page IDs or content types before enabling discovery.</p>
 			</section>
 			</main><aside class="gz-sidebar"><section class="gz-card gz-connections"><span class="gz-eyebrow">CONNECTION DETAILS</span><h2>Your site, connected.</h2><p>Use these addresses in your AI tools.</p>
-				<?php self::endpoint( 'llms.txt', $llms, $public && $s['llms_enabled'] ); self::endpoint( 'MCP server', Endpoints::mcp_url(), $public && $s['mcp_enabled'] ); ?>
+				<?php self::endpoint( 'llms.txt', $llms, $public && $s['llms_enabled'] ); self::endpoint( 'llms-full.txt', Endpoints::llms_full_url(), $public && $s['llms_enabled'] && $s['markdown_enabled'] ); self::endpoint( 'MCP server', Endpoints::mcp_url(), $public && $s['mcp_enabled'] ); ?>
 				<div class="gz-small-rule"></div><span class="gz-eyebrow">QUICK START</span><ol><li>Choose your discovery features.</li><li>Save your settings.</li><li>Add the MCP URL to a compatible client using Streamable HTTP.</li></ol><a class="gz-text-link" href="<?php echo esc_url( $llms ); ?>" target="_blank" rel="noopener">Open saved llms.txt ↗</a></section>
 				<div class="gz-local"><span aria-hidden="true">↳</span><div><strong>Built to stay on your site.</strong><p>No API key. No external processing.<br>Your content, your controls.</p></div></div>
 			</aside></div><footer class="gz-save-bar"><span id="gz-save-status" aria-live="polite">Settings apply site-wide.</span><button class="button button-primary" type="submit">Save changes <span aria-hidden="true">↗</span></button></footer>
-			</form><div id="gz-announcement" class="screen-reader-text" aria-live="polite"></div><p class="gz-footer">GZ AI DISCOVERABILITY <span>Made for the open web.</span></p>
+			</form><div id="gz-announcement" class="screen-reader-text" aria-live="polite"></div><p class="gz-footer">AI DISCOVERABILITY <span>Created by <a href="https://greenzeta.com/" target="_blank" rel="noopener">GreenZeta</a></span></p>
 		</div><?php
 	}
 }
