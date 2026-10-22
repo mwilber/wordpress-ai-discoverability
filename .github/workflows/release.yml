@@ -1,6 +1,12 @@
 name: Release plugin
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to release (for example, v1.0.6)'
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
@@ -9,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -18,16 +24,17 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v6
         with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
 
       - name: Validate release version
         id: version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python3 - <<'PY'
           import os
@@ -55,9 +62,14 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          python3 scripts/build.py
-          python3 -m zipfile -t "dist/wordpress-ai-discoverability-${VERSION}.zip"
-          cp "dist/wordpress-ai-discoverability-${VERSION}.zip" dist/wordpress-ai-discoverability.zip
+          # Older tags may build a ZIP using the previous project name.
+          built_archive="$(python3 scripts/build.py)"
+          versioned_archive="dist/wordpress-ai-discoverability-${VERSION}.zip"
+          python3 -m zipfile -t "$built_archive"
+          if [ "$built_archive" != "$PWD/$versioned_archive" ]; then
+            cp "$built_archive" "$versioned_archive"
+          fi
+          cp "$versioned_archive" dist/wordpress-ai-discoverability.zip
           cd dist
           sha256sum "wordpress-ai-discoverability-${VERSION}.zip" wordpress-ai-discoverability.zip > SHA256SUMS
 
@@ -65,7 +77,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "$RELEASE_TAG" \

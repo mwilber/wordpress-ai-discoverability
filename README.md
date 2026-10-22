@@ -135,6 +135,8 @@ Verification performed for 1.0.6: PHP lint; 54 real-WordPress integration checks
 
 The GitHub Actions release workflow runs when a `vMAJOR.MINOR.PATCH` tag is pushed. It checks that the tag matches the plugin header, `GZ_AI_VERSION`, and `readme.txt` stable tag, then builds the tagged source and publishes a GitHub Release with generated notes, versioned and stable-name ZIPs, and SHA-256 checksums. ZIPs remain ignored by Git. The workflow uses GitHub's built-in token; no additional secrets are needed.
 
+To release an already-pushed tag, open **Actions → Release plugin → Run workflow**, leave the workflow branch set to `master`, enter the existing tag (for example, `v1.0.6`), and run it. The manual trigger must first be committed and pushed to `master`. It checks out the requested tag and publishes ZIPs under the current project name even when an older build script uses the previous filename.
+
 Commit the workflow and any release changes to `master` before tagging. For the current 1.0.6 release:
 
 ```sh

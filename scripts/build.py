@@ -6,7 +6,7 @@ import re
 
 root = Path(__file__).resolve().parent.parent
 version = re.search(r"Version:\s*([\d.]+)", (root / "gz-ai-discoverability.php").read_text()).group(1)
-output = root / "dist" / f"gz-ai-discoverability-{version}.zip"
+output = root / "dist" / f"wordpress-ai-discoverability-{version}.zip"
 output.parent.mkdir(exist_ok=True)
 files = [root / name for name in ["gz-ai-discoverability.php", "uninstall.php", "README.md", "readme.txt", "LICENSE"]]
 for directory in ["includes", "assets"]:
