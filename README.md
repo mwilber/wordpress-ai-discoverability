@@ -144,13 +144,13 @@ The GitHub Actions release workflow runs when a `vMAJOR.MINOR.PATCH` tag is push
 
 To release an already-pushed tag, open **Actions → Release plugin → Run workflow**, leave the workflow branch set to `master`, enter the existing tag (for example, `v1.0.6`), and run it. The manual trigger must first be committed and pushed to `master`. It checks out the requested tag and publishes ZIPs under the current project name even when an older build script uses the previous filename.
 
-Commit the workflow and any release changes to `master` before tagging. For the current 1.0.7 release:
+Commit the workflow and any release changes to `master` before tagging. For the current 1.0.8 release:
 
 ```sh
 git switch master
-git tag -a v1.0.7 -m "Release 1.0.7"
+git tag -a v1.0.8 -m "Release 1.0.8"
 git push origin master
-git push origin v1.0.7
+git push origin v1.0.8
 ```
 
 Watch **Actions → Release plugin**, then find the downloads under **Releases**. For future releases, update all three version fields and the changelog before committing and tagging the new version. Keep published version tags fixed; corrections should receive a new version.

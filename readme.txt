@@ -4,7 +4,7 @@ Tags: ai, llms-txt, markdown, mcp, discoverability
 Requires at least: 6.6
 Tested up to: 7.1.3
 Requires PHP: 8.1
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,9 @@ Submission must be enabled separately. Holding MCP comments for review is enable
 Stored HTML and block content are supported. Content available only through dynamic callbacks, metadata, JavaScript, or shortcodes requires a trusted site-specific adapter.
 
 == Changelog ==
+
+= 1.0.8 =
+* Version bump; no functional changes from 1.0.7.
 
 = 1.0.7 =
 * Include the WordPress tagline in the generated llms.txt heading and update plugin branding and author attribution.
